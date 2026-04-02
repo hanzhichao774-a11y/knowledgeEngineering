@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto';
 import { broadcast } from '../websocket/handler.js';
 
+import { ManagerAgent } from '../agents/ManagerAgent.js';
+import { storeGraphData } from './GraphService.js';
+import { getFilePath } from '../routes/upload.js';
+import type { AgentMessage, SkillResult, ExecutionContext } from '../agents/types.js';
+
 export interface Step {
   name: string;
   status: 'pending' | 'running' | 'done' | 'error';
@@ -47,7 +52,17 @@ const DEFAULT_STEPS: Step[] = [
   { name: '生成知识图谱', status: 'pending', skill: '知识图谱生成', skillIcon: '🕸️', tokenUsed: 0, tokenLimit: 8000 },
 ];
 
+const SKILL_ICONS: Record<string, string> = {
+  '多模态文档解析': '📑',
+  '本体提取': '🔍',
+  'Schema 构建': '📊',
+  '图数据库写入': '💾',
+  '知识图谱生成': '🕸️',
+};
+
 export class TaskService {
+  private manager = new ManagerAgent();
+
   listTasks() {
     return Array.from(tasks.values()).map(({ result, ...rest }) => rest);
   }
@@ -75,91 +90,124 @@ export class TaskService {
 
     broadcast({ type: 'task.created', task: { ...task, result: undefined } });
 
-    setTimeout(() => this.runMockExecution(task.id), 500);
+    this.executeTask(task.id).catch((err) => {
+      console.error(`Task ${task.id} execution failed:`, err);
+      task.status = 'failed';
+      broadcast({ type: 'task.status', taskId: task.id, status: 'failed' });
+    });
 
     return task;
   }
 
-  private async runMockExecution(taskId: string) {
+  private async executeTask(taskId: string) {
     const task = tasks.get(taskId);
     if (!task) return;
+
+    const startTime = Date.now();
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    const filePath = task.fileId ? getFilePath(task.fileId) : undefined;
+
+    const ctx: ExecutionContext = {
+      taskId,
+      fileId: task.fileId,
+      filePath,
+      previousResults: [],
+      onProgress: (msg: AgentMessage) => {
+        const stepIndex = msg.metadata?.stepIndex as number | undefined;
+        if (stepIndex !== undefined && msg.content.includes('开始执行')) {
+          task.steps[stepIndex].status = 'running';
+          broadcast({ type: 'task.step.start', taskId, stepIndex });
+        }
+
+        const skillName = msg.metadata?.skillName as string | undefined;
+        const agentStatus = stepIndex !== undefined && skillName
+          ? {
+              skill: skillName,
+              skillIcon: SKILL_ICONS[skillName] || '⚙️',
+              tokenUsed: 0,
+              tokenLimit: 8000,
+              status: (msg.content.includes('完成') || msg.content.includes('失败') ? 'done' : 'running') as 'running' | 'done',
+            }
+          : undefined;
+
+        broadcast({
+          type: 'agent.message',
+          message: {
+            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            role: msg.role === 'manager' ? 'manager' : 'worker',
+            name: msg.role === 'manager' ? '管理智能体' : '知识工程 #KE-01',
+            content: `<p>${msg.content}</p>`,
+            timestamp: new Date().toTimeString().slice(0, 5),
+            agentStatus,
+          },
+        });
+      },
+      onStepComplete: (stepIndex: number, result: SkillResult) => {
+        const step = task.steps[stepIndex];
+        if (!step) return;
+
+        step.status = result.status === 'success' ? 'done' : 'error';
+        step.tokenUsed = result.tokenUsed;
+        step.duration = result.duration;
+
+        totalInputTokens += result.tokenUsed;
+        totalOutputTokens += Math.floor(result.tokenUsed * 0.4);
+
+        const elapsed = formatElapsed(Date.now() - startTime);
+        task.cost = {
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          estimatedCost: parseFloat(((totalInputTokens + totalOutputTokens) * 0.00003).toFixed(2)),
+          elapsed,
+        };
+
+        broadcast({
+          type: 'task.step.complete',
+          taskId,
+          stepIndex,
+          step: { ...step },
+          cost: { ...task.cost },
+        });
+      },
+    };
 
     task.status = 'running';
     broadcast({ type: 'task.status', taskId, status: 'running' });
 
-    const stepConfigs = [
-      { tokenUsed: 1247, duration: 3.2, inputTokens: 1247, outputTokens: 420, cost: 0.08, elapsed: '6s' },
-      { tokenUsed: 3891, duration: 8.5, inputTokens: 3891, outputTokens: 1600, cost: 0.28, elapsed: '28s' },
-      { tokenUsed: 5138, duration: 6.3, inputTokens: 5138, outputTokens: 2764, cost: 0.42, elapsed: '55s' },
-      { tokenUsed: 5800, duration: 2.1, inputTokens: 5800, outputTokens: 3100, cost: 0.48, elapsed: '1m 15s' },
-      { tokenUsed: 6580, duration: 3.5, inputTokens: 6580, outputTokens: 3580, cost: 0.55, elapsed: '1m 28s' },
-    ];
+    await this.manager.analyzeAndDispatch(ctx);
 
-    for (let i = 0; i < task.steps.length; i++) {
-      task.steps[i].status = 'running';
-      broadcast({ type: 'task.step.start', taskId, stepIndex: i });
-      broadcast({
-        type: 'agent.message',
-        message: {
-          id: `msg-${Date.now()}`,
-          role: 'worker',
-          name: '知识工程 #KE-01',
-          content: `<p><strong>Step ${i + 1}/5 · ${task.steps[i].name}</strong></p><p>正在执行${task.steps[i].skill}...</p>`,
-          timestamp: new Date().toTimeString().slice(0, 5),
-          agentStatus: {
-            skill: task.steps[i].skill,
-            skillIcon: task.steps[i].skillIcon,
-            tokenUsed: Math.floor(stepConfigs[i].tokenUsed * 0.5),
-            tokenLimit: 8000,
-            status: 'running',
-          },
-        },
+    const docResult = ctx.previousResults.find((r) => r.skillName === '多模态文档解析');
+    const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
+    const schemaResult = ctx.previousResults.find((r) => r.skillName === 'Schema 构建');
+    const graphResult = ctx.previousResults.find((r) => r.skillName === '知识图谱生成');
+
+    const ontologyData = ontologyResult?.data as Record<string, unknown> | undefined;
+    const schemaData = schemaResult?.data as Record<string, unknown> | undefined;
+    const docData = docResult?.data as Record<string, unknown> | undefined;
+    const graphData = graphResult?.data as Record<string, unknown> | undefined;
+
+    if (graphData?.nodes && graphData?.edges) {
+      storeGraphData(taskId, {
+        nodes: graphData.nodes as Array<{ id: string; label: string; type: string }>,
+        edges: graphData.edges as Array<{ source: string; target: string; label: string }>,
       });
-
-      await sleep(stepConfigs[i].duration * 500);
-
-      const cfg = stepConfigs[i];
-      task.steps[i].status = 'done';
-      task.steps[i].tokenUsed = cfg.tokenUsed;
-      task.steps[i].duration = cfg.duration;
-      task.cost = {
-        inputTokens: cfg.inputTokens,
-        outputTokens: cfg.outputTokens,
-        estimatedCost: cfg.cost,
-        elapsed: cfg.elapsed,
-      };
-
-      broadcast({
-        type: 'task.step.complete',
-        taskId,
-        stepIndex: i,
-        step: task.steps[i],
-        cost: task.cost,
-      });
-
-      await sleep(300);
     }
 
     task.status = 'completed';
     task.result = {
       ontology: {
-        entities: [
-          { name: '信息安全策略', type: 'entity', desc: '组织信息安全总体方针' },
-          { name: '数据分类', type: 'entity', desc: '按敏感程度划分数据类别' },
-          { name: '访问控制', type: 'entity', desc: '用户权限管理机制' },
-          { name: '管辖', type: 'relation', desc: '安全策略 → 数据分类' },
-          { name: '约束', type: 'relation', desc: '访问控制 → 安全等级' },
-          { name: '安全等级', type: 'attr', desc: '机密/秘密/内部/公开' },
-        ],
-        entityCount: 18,
-        relationCount: 12,
-        ruleCount: 9,
-        attrCount: 25,
+        entities: (ontologyData?.entities as Array<{ name: string; type: string; desc: string }>) ?? [],
+        entityCount: (ontologyData?.entityCount as number) ?? 0,
+        relationCount: (ontologyData?.relationCount as number) ?? 0,
+        ruleCount: (ontologyData?.ruleCount as number) ?? 0,
+        attrCount: (ontologyData?.attrCount as number) ?? 0,
       },
-      schema: 'RDF Schema generated',
-      summary: '本文档为企业信息安全管理制度，共 7 章 38 页。',
-      graphNodeCount: 10,
-      graphEdgeCount: 10,
+      schema: (schemaData?.schema as string) ?? '',
+      summary: (docData?.summary as string) ?? '',
+      graphNodeCount: (graphData?.nodeCount as number) ?? 0,
+      graphEdgeCount: (graphData?.edgeCount as number) ?? 0,
     };
 
     broadcast({ type: 'task.complete', taskId });
@@ -169,13 +217,21 @@ export class TaskService {
         id: `msg-${Date.now()}`,
         role: 'manager',
         name: '管理智能体',
-        content: '<p>✅ <strong>知识工程任务已完成</strong></p>',
+        content: `<p>✅ <strong>知识工程任务已完成</strong></p>
+<p>知识工程数字员工 #KE-01 已完成全部 5 个步骤：</p>
+<p>• 文档解析 → 本体提取 → Schema 构建 → 图数据库写入 → 知识图谱生成</p>
+<p>📊 产出：${task.result.ontology.entityCount} 个实体、${task.result.ontology.relationCount} 条关系、${task.result.ontology.ruleCount} 条规则</p>
+<p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
         timestamp: new Date().toTimeString().slice(0, 5),
       },
     });
   }
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
 }

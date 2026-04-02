@@ -4,6 +4,11 @@ import { writeFile, mkdir } from 'fs/promises';
 import { resolve } from 'path';
 
 const UPLOAD_DIR = resolve(import.meta.dirname, '../../uploads');
+const fileRegistry = new Map<string, string>();
+
+export function getFilePath(fileId: string): string | undefined {
+  return fileRegistry.get(fileId);
+}
 
 export const uploadRoutes: FastifyPluginAsync = async (app) => {
   app.post('/upload', async (req) => {
@@ -16,6 +21,8 @@ export const uploadRoutes: FastifyPluginAsync = async (app) => {
     const filePath = resolve(UPLOAD_DIR, `${fileId}.${ext}`);
     const buffer = await file.toBuffer();
     await writeFile(filePath, buffer);
+
+    fileRegistry.set(fileId, filePath);
 
     return {
       fileId,

@@ -1,52 +1,49 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
+import { callLLM } from '../services/LLMService.js';
 
-/**
- * Schema building skill.
- * In production: calls LLM to construct RDF/OWL schema from extracted ontology.
- * Currently: returns mock RDF Turtle content.
- */
-export async function schemaBuildSkill(_ctx: ExecutionContext): Promise<SkillResult> {
-  await sleep(randomBetween(3000, 6000));
+const SYSTEM_PROMPT = `你是一个知识工程专家。根据提供的本体提取结果，构建 RDF/OWL Schema（Turtle 格式）。
 
-  const schema = `@prefix biz: <http://bizagentos.ai/ontology/> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+要求：
+1. 使用 @prefix biz: <http://bizagentos.ai/ontology/> 作为命名空间
+2. 为每个 entity 类型创建 rdfs:Class
+3. 为每个 relation 类型创建 rdf:Property（包含 domain 和 range）
+4. 为每个 attr 类型创建 owl:DatatypeProperty
+5. 为每个 rule 类型添加注释说明
 
-biz:SecurityPolicy a rdfs:Class ;
-  rdfs:label "信息安全策略" ;
-  biz:level [ "机密", "秘密", "内部", "公开" ] .
+直接返回 Turtle 格式的 Schema 文本，不要包含 JSON 和 markdown 代码块标记。`;
 
-biz:DataClassification a rdfs:Class ;
-  rdfs:label "数据分类" .
+export async function schemaBuildSkill(ctx: ExecutionContext): Promise<SkillResult> {
+  const startTime = Date.now();
+  const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
+  const ontologyData = ontologyResult?.data as Record<string, unknown> | undefined;
 
-biz:AccessControl a rdfs:Class ;
-  rdfs:label "访问控制" ;
-  biz:model "RBAC" .
+  const userPrompt = `本体提取结果：\n${JSON.stringify(ontologyData, null, 2)}\n\n请据此构建 RDF Schema。`;
 
-biz:NetworkSecurity a rdfs:Class ;
-  rdfs:label "网络安全" .
+  try {
+    const { text, usage } = await callLLM(SYSTEM_PROMPT, userPrompt);
+    const schema = text.replace(/```[\w]*\n?/g, '').trim();
 
-biz:governs a rdf:Property ;
-  rdfs:domain biz:SecurityPolicy ;
-  rdfs:range biz:DataClassification .`;
+    const classCount = (schema.match(/a\s+rdfs:Class/g) || []).length;
+    const propertyCount = (schema.match(/a\s+rdf:Property/g) || []).length +
+                          (schema.match(/a\s+owl:DatatypeProperty/g) || []).length;
 
-  return {
-    skillName: 'Schema 构建',
-    status: 'success',
-    data: {
-      schema,
-      classCount: 7,
-      propertyCount: 5,
-      constraintCount: 4,
-    },
-    tokenUsed: 5138,
-    duration: 6.3,
-  };
-}
+    const duration = (Date.now() - startTime) / 1000;
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function randomBetween(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+    return {
+      skillName: 'Schema 构建',
+      status: 'success',
+      data: { schema, classCount, propertyCount, constraintCount: 0 },
+      tokenUsed: usage?.inputTokens ?? 0,
+      duration,
+    };
+  } catch (err) {
+    const duration = (Date.now() - startTime) / 1000;
+    return {
+      skillName: 'Schema 构建',
+      status: 'error',
+      data: { error: (err as Error).message },
+      tokenUsed: 0,
+      duration,
+    };
+  }
 }

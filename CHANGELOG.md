@@ -4,7 +4,19 @@
 
 ## [Unreleased]
 
-_新的变更在合并到 main 后添加到此处，发布版本时移至对应版本标题下。_
+### Added
+
+- **LLM 真实集成**：通过 KodaX `@kodax/ai` 接入 MiniMax LLM，3 个 Skill（文档解析、本体提取、Schema 构建）调用真实 LLM 生成结果
+- **前后端打通**：前端通过 WebSocket 接收后端实时推送，REST API 创建任务和上传文件
+- **LLMService 封装**：`backend/src/services/LLMService.ts`，统一 LLM 调用和 JSON 解析
+- **Mock/Real 双模式**：前端通过 URL 参数 `?mock=true` 切换 Mock 演示模式和真实后端模式
+
+### Changed
+
+- **TaskService 重构**：移除 `runMockExecution` 硬编码流程，改为调用 `ManagerAgent.analyzeAndDispatch()` 真实执行 pipeline
+- **Skills 重写**：5 个 Skill 从 sleep+硬编码改为真实 LLM 调用（文档解析/本体提取/Schema 构建）和数据驱动（图 DB 写入/图谱生成）
+- **GraphService 重构**：从返回固定 Mock 数据改为存储/读取任务产出的真实图谱数据
+- **文件上传增强**：新增 `fileRegistry` 映射 fileId → filePath，供 Skills 读取文件内容
 
 ---
 

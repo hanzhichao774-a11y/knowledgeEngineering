@@ -1,32 +1,55 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
+import { callLLM, extractJSON } from '../services/LLMService.js';
+import { readFile } from 'fs/promises';
 
-/**
- * Document parsing skill.
- * In production: calls LLM with multi-modal capabilities to parse PDF/Word.
- * Currently: returns mock structured result.
- */
-export async function documentParseSkill(_ctx: ExecutionContext): Promise<SkillResult> {
-  await sleep(randomBetween(2000, 4000));
+const SYSTEM_PROMPT = `你是一个专业的文档分析助手。用户会给你一段文档内容（可能是节选），请分析文档结构并返回 JSON 格式的结果。
 
-  return {
-    skillName: '多模态文档解析',
-    status: 'success',
-    data: {
-      pageCount: 38,
-      chapters: 7,
-      paragraphs: 42,
-      tables: 15,
-      summary: '本文档为企业信息安全管理制度，共 7 章 38 页，涵盖：信息安全策略、数据分类分级、访问控制、网络安全、物理安全、安全事件管理、合规审计。',
-    },
-    tokenUsed: 1247,
-    duration: 3.2,
-  };
+要求返回如下 JSON 结构（不要包含其他内容）：
+\`\`\`json
+{
+  "pageCount": <估计页数>,
+  "chapters": <章节数>,
+  "paragraphs": <段落数>,
+  "tables": <表格数>,
+  "summary": "<200字以内的文档摘要>"
 }
+\`\`\``;
 
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillResult> {
+  const startTime = Date.now();
 
-function randomBetween(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  let documentContent = '（未提供文档内容，请基于任务标题进行模拟分析）';
+  if (ctx.filePath) {
+    try {
+      const buffer = await readFile(ctx.filePath);
+      documentContent = buffer.toString('utf-8').slice(0, 15000);
+    } catch {
+      documentContent = `（无法读取文件 ${ctx.filePath}，请基于任务标题进行分析）`;
+    }
+  }
+
+  const userPrompt = `请分析以下文档内容：\n\n${documentContent}`;
+
+  try {
+    const { text, usage } = await callLLM(SYSTEM_PROMPT, userPrompt);
+    const data = extractJSON(text);
+    const duration = (Date.now() - startTime) / 1000;
+
+    return {
+      skillName: '多模态文档解析',
+      status: 'success',
+      data,
+      tokenUsed: usage?.inputTokens ?? 0,
+      duration,
+    };
+  } catch (err) {
+    const duration = (Date.now() - startTime) / 1000;
+    return {
+      skillName: '多模态文档解析',
+      status: 'error',
+      data: { error: (err as Error).message },
+      tokenUsed: 0,
+      duration,
+    };
+  }
 }

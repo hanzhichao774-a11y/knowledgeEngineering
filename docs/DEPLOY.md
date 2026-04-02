@@ -76,17 +76,11 @@ node dist/index.js
 
 ### Mock 模式
 
-不需要真实 LLM 和 Neo4j 时，使用 mock 模式：
+前端支持 `?mock=true` URL 参数，使用前端本地 Mock 数据（无需后端和 LLM）：
 
-```bash
-# 开发环境
-npm run dev -- --mock
-
-# 生产环境
-node dist/index.js --mock
 ```
-
-Mock 模式下创建任务后会自动模拟 5 步执行流程。
+http://localhost:5173?mock=true
+```
 
 ---
 
@@ -100,11 +94,16 @@ Mock 模式下创建任务后会自动模拟 5 步执行流程。
 # 服务端口（默认 3001）
 PORT=3001
 
+# MiniMax LLM API Key（必填，通过 KodaX @kodax/ai 调用）
+MINIMAX_API_KEY=your_minimax_api_key
+
 # Neo4j 连接（不配置密码时自动使用 Mock）
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your_password
 ```
+
+**重要**：`MINIMAX_API_KEY` 是调用 LLM 的必需变量。如果未设置，后端启动时会警告，LLM 调用将失败。
 
 ### 前端
 

@@ -121,27 +121,42 @@ cd backend && npm run dev
 
 前端访问 http://localhost:5173，后端 API 在 http://localhost:3001。
 
-### 5. Mock 模式
+### 5. 配置 LLM API Key
 
-后端支持 `--mock` 参数模拟完整执行流程（无需真实 LLM 和 Neo4j）：
+后端通过 KodaX `@kodax/ai` 调用 MiniMax LLM，需要设置环境变量：
 
 ```bash
-cd backend && npm run dev -- --mock
+export MINIMAX_API_KEY=your_api_key
 ```
+
+### 6. Mock 模式
+
+前端访问 `http://localhost:5173?mock=true` 可使用 Mock 演示模式（无需后端和 LLM）。
 
 ### 环境变量
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | 3001 | 后端端口 |
+| `MINIMAX_API_KEY` | (必填) | MiniMax LLM API Key |
 | `VITE_API_URL` | http://localhost:3001 | 前端连接后端地址 |
 | `NEO4J_URI` | bolt://localhost:7687 | Neo4j 连接地址 |
 | `NEO4J_USERNAME` | neo4j | Neo4j 用户名 |
 | `NEO4J_PASSWORD` | (空) | Neo4j 密码，未配置时使用 Mock 模式 |
 
-## 演示流程
+## 使用方式
 
-页面加载后自动播放 Mock 演示流程（约 28 秒完成）：
+### 真实模式
+
+1. 设置 `MINIMAX_API_KEY` 环境变量
+2. 启动后端：`cd backend && npm run dev`
+3. 启动前端：`cd frontend && npm run dev`
+4. 访问 `http://localhost:5173`
+5. 上传文档或输入指令，后端调用真实 LLM 执行知识工程 pipeline
+
+### Mock 演示模式
+
+访问 `http://localhost:5173?mock=true`，页面自动播放 28 秒完整流程动画：
 
 1. 用户上传「企业信息安全管理制度.pdf」
 2. 管理智能体分析任务并委派给知识工程数字员工 #KE-01
@@ -154,4 +169,6 @@ cd backend && npm run dev -- --mock
 - [后端 API 文档](backend/API.md)
 - [前端组件文档](frontend/COMPONENTS.md)
 - [部署指南](docs/DEPLOY.md)
+- [工程纪律](docs/ENGINEERING.md)
+- [变更记录](CHANGELOG.md)
 - [Demo 计划](4-15-Demo计划.md)
