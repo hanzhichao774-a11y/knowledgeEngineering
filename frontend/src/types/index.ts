@@ -12,7 +12,7 @@ export interface StepOutput {
 
 export interface Step {
   name: string;
-  status: 'pending' | 'running' | 'done' | 'error';
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
   skill: string;
   skillIcon: string;
   tokenUsed: number;

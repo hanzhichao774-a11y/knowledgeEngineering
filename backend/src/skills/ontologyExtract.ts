@@ -41,6 +41,7 @@ export async function ontologyExtractSkill(ctx: ExecutionContext): Promise<Skill
       duration,
     };
   } catch (err) {
+    console.error('[Skill:ontologyExtract] Failed:', (err as Error).message);
     const duration = (Date.now() - startTime) / 1000;
     return {
       skillName: '本体提取',

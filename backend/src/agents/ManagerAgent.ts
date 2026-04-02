@@ -42,12 +42,14 @@ export class ManagerAgent {
       timestamp: new Date().toISOString(),
     });
 
-    await worker.execute(ctx);
+    const allSuccess = await worker.execute(ctx);
 
     ctx.onProgress({
       agentId: this.config.id,
       role: 'manager',
-      content: '知识工程任务已完成。所有步骤执行成功。',
+      content: allSuccess
+        ? '知识工程任务已完成。所有步骤执行成功。'
+        : '知识工程任务执行中断。部分步骤失败，后续步骤已跳过。',
       timestamp: new Date().toISOString(),
     });
   }

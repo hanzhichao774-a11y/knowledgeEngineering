@@ -120,6 +120,18 @@
   border: 1px solid var(--border);
 }
 
+.stepError {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--red, #ef4444);
+}
+
+.stepSkipped {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  opacity: 0.6;
+}
+
 .stepInfo {
   flex: 1;
 }

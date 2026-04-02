@@ -8,7 +8,7 @@ import type { AgentMessage, SkillResult, ExecutionContext } from '../agents/type
 
 export interface Step {
   name: string;
-  status: 'pending' | 'running' | 'done' | 'error';
+  status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
   skill: string;
   skillIcon: string;
   tokenUsed: number;
@@ -148,7 +148,9 @@ export class TaskService {
         const step = task.steps[stepIndex];
         if (!step) return;
 
-        step.status = result.status === 'success' ? 'done' : 'error';
+        const errorData = result.data as Record<string, unknown> | undefined;
+        const isSkipped = result.status === 'error' && typeof errorData?.error === 'string' && (errorData.error as string).startsWith('跳过');
+        step.status = result.status === 'success' ? 'done' : isSkipped ? 'skipped' : 'error';
         step.tokenUsed = result.tokenUsed;
         step.duration = result.duration;
 
@@ -178,15 +180,25 @@ export class TaskService {
 
     await this.manager.analyzeAndDispatch(ctx);
 
+    const hasError = ctx.previousResults.some((r) => r.status === 'error');
+    const failedSteps = task.steps
+      .filter((s) => s.status === 'error')
+      .map((s) => s.name);
+    const completedSteps = task.steps.filter((s) => s.status === 'done');
+
+    task.steps.forEach((s) => {
+      if (s.status === 'pending') s.status = 'skipped';
+    });
+
     const docResult = ctx.previousResults.find((r) => r.skillName === '多模态文档解析');
     const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
     const schemaResult = ctx.previousResults.find((r) => r.skillName === 'Schema 构建');
     const graphResult = ctx.previousResults.find((r) => r.skillName === '知识图谱生成');
 
-    const ontologyData = ontologyResult?.data as Record<string, unknown> | undefined;
-    const schemaData = schemaResult?.data as Record<string, unknown> | undefined;
-    const docData = docResult?.data as Record<string, unknown> | undefined;
-    const graphData = graphResult?.data as Record<string, unknown> | undefined;
+    const ontologyData = ontologyResult?.status === 'success' ? ontologyResult.data as Record<string, unknown> : undefined;
+    const schemaData = schemaResult?.status === 'success' ? schemaResult.data as Record<string, unknown> : undefined;
+    const docData = docResult?.status === 'success' ? docResult.data as Record<string, unknown> : undefined;
+    const graphData = graphResult?.status === 'success' ? graphResult.data as Record<string, unknown> : undefined;
 
     if (graphData?.nodes && graphData?.edges) {
       storeGraphData(taskId, {
@@ -195,7 +207,7 @@ export class TaskService {
       });
     }
 
-    task.status = 'completed';
+    task.status = hasError ? 'failed' : 'completed';
     task.result = {
       ontology: {
         entities: (ontologyData?.entities as Array<{ name: string; type: string; desc: string }>) ?? [],
@@ -210,21 +222,38 @@ export class TaskService {
       graphEdgeCount: (graphData?.edgeCount as number) ?? 0,
     };
 
-    broadcast({ type: 'task.complete', taskId });
-    broadcast({
-      type: 'agent.message',
-      message: {
-        id: `msg-${Date.now()}`,
-        role: 'manager',
-        name: '管理智能体',
-        content: `<p>✅ <strong>知识工程任务已完成</strong></p>
-<p>知识工程数字员工 #KE-01 已完成全部 5 个步骤：</p>
+    broadcast({ type: 'task.complete', taskId, status: task.status });
+
+    if (hasError) {
+      broadcast({
+        type: 'agent.message',
+        message: {
+          id: `msg-${Date.now()}`,
+          role: 'manager',
+          name: '管理智能体',
+          content: `<p>❌ <strong>知识工程任务失败</strong></p>
+<p>失败步骤：${failedSteps.join('、')}</p>
+<p>已完成：${completedSteps.length} / ${task.steps.length} 步</p>
+<p>💰 已消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
+          timestamp: new Date().toTimeString().slice(0, 5),
+        },
+      });
+    } else {
+      broadcast({
+        type: 'agent.message',
+        message: {
+          id: `msg-${Date.now()}`,
+          role: 'manager',
+          name: '管理智能体',
+          content: `<p>✅ <strong>知识工程任务已完成</strong></p>
+<p>知识工程数字员工 #KE-01 已完成全部 ${task.steps.length} 个步骤：</p>
 <p>• 文档解析 → 本体提取 → Schema 构建 → 图数据库写入 → 知识图谱生成</p>
 <p>📊 产出：${task.result.ontology.entityCount} 个实体、${task.result.ontology.relationCount} 条关系、${task.result.ontology.ruleCount} 条规则</p>
 <p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
-        timestamp: new Date().toTimeString().slice(0, 5),
-      },
-    });
+          timestamp: new Date().toTimeString().slice(0, 5),
+        },
+      });
+    }
   }
 }
 

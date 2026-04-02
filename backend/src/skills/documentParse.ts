@@ -1,6 +1,9 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
 import { callLLM, extractJSON } from '../services/LLMService.js';
 import { readFile } from 'fs/promises';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdf = require('pdf-parse');
 
 const SYSTEM_PROMPT = `你是一个专业的文档分析助手。用户会给你一段文档内容（可能是节选），请分析文档结构并返回 JSON 格式的结果。
 
@@ -22,8 +25,15 @@ export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillRe
   if (ctx.filePath) {
     try {
       const buffer = await readFile(ctx.filePath);
-      documentContent = buffer.toString('utf-8').slice(0, 15000);
-    } catch {
+      if (ctx.filePath.toLowerCase().endsWith('.pdf')) {
+        const pdfData = await pdf(buffer);
+        documentContent = pdfData.text.slice(0, 15000);
+        console.log(`[Skill:documentParse] PDF extracted: ${pdfData.numpages} pages, ${pdfData.text.length} chars`);
+      } else {
+        documentContent = buffer.toString('utf-8').slice(0, 15000);
+      }
+    } catch (readErr) {
+      console.error('[Skill:documentParse] File read error:', (readErr as Error).message);
       documentContent = `（无法读取文件 ${ctx.filePath}，请基于任务标题进行分析）`;
     }
   }
@@ -43,6 +53,7 @@ export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillRe
       duration,
     };
   } catch (err) {
+    console.error('[Skill:documentParse] Failed:', (err as Error).message);
     const duration = (Date.now() - startTime) / 1000;
     return {
       skillName: '多模态文档解析',

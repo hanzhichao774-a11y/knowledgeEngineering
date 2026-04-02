@@ -72,7 +72,7 @@ function handleWSEvent(event: Record<string, unknown>) {
       const cost = event.cost as Parameters<typeof taskStore.updateCost>[1];
 
       taskStore.updateStep(taskId, stepIndex, {
-        status: (step.status as 'done' | 'error') ?? 'done',
+        status: (step.status as 'done' | 'error' | 'skipped') ?? 'done',
         tokenUsed: (step.tokenUsed as number) ?? 0,
         duration: step.duration as number | undefined,
       });
@@ -82,7 +82,8 @@ function handleWSEvent(event: Record<string, unknown>) {
 
     case 'task.complete': {
       const taskId = event.taskId as string;
-      taskStore.updateTaskStatus(taskId, 'completed');
+      const finalStatus = (event.status as 'completed' | 'failed') ?? 'completed';
+      taskStore.updateTaskStatus(taskId, finalStatus);
 
       fetchTaskResult(taskId).then((result) => {
         if (result && !result.error) {
@@ -124,7 +125,10 @@ function handleWSEvent(event: Record<string, unknown>) {
             skills: activeTask.steps.map((s) => ({
               name: s.skill,
               icon: s.skillIcon,
-              status: s.status === 'done' ? 'done' as const : s.status === 'running' ? 'running' as const : 'idle' as const,
+              status: s.status === 'done' ? 'done' as const
+                : s.status === 'running' ? 'running' as const
+                : s.status === 'error' ? 'done' as const
+                : 'idle' as const,
             })),
           });
         }

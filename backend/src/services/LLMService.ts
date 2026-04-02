@@ -19,19 +19,32 @@ export interface LLMResponse {
 
 export async function callLLM(systemPrompt: string, userPrompt: string): Promise<LLMResponse> {
   const p = getOrInitProvider();
+  console.log(`[LLM] Calling provider: ${p.getModel()}, configured: ${p.isConfigured()}`);
+
   const messages: KodaXMessage[] = [
-    { role: 'user', content: userPrompt },
+    { role: 'user', content: userPrompt.slice(0, 200) + (userPrompt.length > 200 ? '...' : '') },
   ];
 
   const startTime = Date.now();
-  const result = await p.stream(messages, [], systemPrompt, false);
-  const elapsed = Date.now() - startTime;
-
-  const text = result.textBlocks.map((b) => b.text).join('');
-
-  console.log(`LLM call completed in ${elapsed}ms, tokens: ${result.usage?.totalTokens ?? 'unknown'}`);
-
-  return { text, usage: result.usage };
+  try {
+    const result = await p.stream(
+      [{ role: 'user', content: userPrompt }],
+      [],
+      systemPrompt,
+      false,
+    );
+    const elapsed = Date.now() - startTime;
+    const text = result.textBlocks.map((b) => b.text).join('');
+    console.log(`[LLM] OK in ${elapsed}ms, tokens: ${result.usage?.totalTokens ?? 'unknown'}, textBlocks: ${result.textBlocks.length}, text length: ${text.length}`);
+    if (!text.trim()) {
+      throw new Error('LLM returned empty response');
+    }
+    return { text, usage: result.usage };
+  } catch (err) {
+    const elapsed = Date.now() - startTime;
+    console.error(`[LLM] FAILED in ${elapsed}ms:`, (err as Error).message);
+    throw err;
+  }
 }
 
 export function extractJSON<T = unknown>(text: string): T {

@@ -37,6 +37,7 @@ export async function schemaBuildSkill(ctx: ExecutionContext): Promise<SkillResu
       duration,
     };
   } catch (err) {
+    console.error('[Skill:schemaBuild] Failed:', (err as Error).message);
     const duration = (Date.now() - startTime) / 1000;
     return {
       skillName: 'Schema 构建',

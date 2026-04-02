@@ -25,7 +25,7 @@ export class KEWorker {
     model: 'minimax',
   };
 
-  async execute(ctx: ExecutionContext): Promise<void> {
+  async execute(ctx: ExecutionContext): Promise<boolean> {
     for (let i = 0; i < SKILL_PIPELINE.length; i++) {
       const { name, fn } = SKILL_PIPELINE[i];
 
@@ -49,6 +49,27 @@ export class KEWorker {
         timestamp: new Date().toISOString(),
         metadata: { stepIndex: i, skillName: name, result: result.status },
       });
+
+      if (result.status === 'error') {
+        for (let j = i + 1; j < SKILL_PIPELINE.length; j++) {
+          ctx.onStepComplete(j, {
+            skillName: SKILL_PIPELINE[j].name,
+            status: 'error',
+            data: { error: `跳过：前置步骤「${name}」执行失败` },
+            tokenUsed: 0,
+            duration: 0,
+          });
+          ctx.onProgress({
+            agentId: this.config.id,
+            role: 'worker',
+            content: `Step ${j + 1}/${SKILL_PIPELINE.length} · ${SKILL_PIPELINE[j].name} — 已跳过`,
+            timestamp: new Date().toISOString(),
+            metadata: { stepIndex: j, skillName: SKILL_PIPELINE[j].name, result: 'skipped' },
+          });
+        }
+        return false;
+      }
     }
+    return true;
   }
 }
