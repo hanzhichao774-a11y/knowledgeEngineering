@@ -26,6 +26,7 @@
 .avatarUser { background: var(--blue-bg); }
 .avatarManager { background: var(--purple-bg); }
 .avatarWorker { background: var(--green-bg); }
+.avatarAssistant { background: rgba(245, 158, 11, 0.15); }
 .avatarSystem { background: var(--bg-tertiary); }
 
 .msgBody {
@@ -54,6 +55,7 @@
 .roleUser { background: var(--blue-bg); color: var(--blue); }
 .roleManager { background: var(--purple-bg); color: var(--purple); }
 .roleWorker { background: var(--green-bg); color: var(--green); }
+.roleAssistant { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .roleSystem { background: var(--bg-tertiary); color: var(--text-muted); }
 
 .msgTime {

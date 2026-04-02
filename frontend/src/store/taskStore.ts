@@ -7,6 +7,7 @@ interface TaskState {
   setActiveTask: (id: string) => void;
   addTask: (task: Task) => void;
   updateStep: (taskId: string, stepIndex: number, updates: Partial<Step>) => void;
+  replaceSteps: (taskId: string, steps: Step[]) => void;
   updateCost: (taskId: string, cost: CostInfo) => void;
   updateTaskStatus: (taskId: string, status: Task['status']) => void;
   getActiveTask: () => Task | undefined;
@@ -32,6 +33,13 @@ export const useTaskStore = create<TaskState>((set, get) => ({
               ),
             }
           : t
+      ),
+    })),
+
+  replaceSteps: (taskId, steps) =>
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === taskId ? { ...t, steps } : t
       ),
     })),
 

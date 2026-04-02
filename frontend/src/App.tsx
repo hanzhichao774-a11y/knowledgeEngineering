@@ -80,6 +80,13 @@ function handleWSEvent(event: Record<string, unknown>) {
       break;
     }
 
+    case 'task.steps.reset': {
+      const taskId = event.taskId as string;
+      const steps = event.steps as Parameters<typeof taskStore.replaceSteps>[1];
+      if (steps) taskStore.replaceSteps(taskId, steps);
+      break;
+    }
+
     case 'task.complete': {
       const taskId = event.taskId as string;
       const finalStatus = (event.status as 'completed' | 'failed') ?? 'completed';
@@ -87,7 +94,7 @@ function handleWSEvent(event: Record<string, unknown>) {
 
       fetchTaskResult(taskId).then((result) => {
         if (result && !result.error) {
-          if (result.ontology) resultStore.setOntologyResult(result.ontology);
+          if (result.ontology?.entityCount) resultStore.setOntologyResult(result.ontology);
           if (result.schema) {
             resultStore.setSchemaContent(escapeSchemaHtml(result.schema));
             resultStore.setSchemaStatus('done');
@@ -113,15 +120,16 @@ function handleWSEvent(event: Record<string, unknown>) {
         const activeTask = taskStore.getActiveTask();
         if (activeTask) {
           const step = message.agentStatus;
+          const isQuery = activeTask.steps.length <= 2;
           resultStore.setAgentDetail({
-            id: 'KE-01',
-            name: '知识工程数字员工 #KE-01',
-            description: '知识工程工作线 · 实例 01',
+            id: isQuery ? 'QR-01' : 'KE-01',
+            name: isQuery ? '知识检索数字员工 #QR-01' : '知识工程数字员工 #KE-01',
+            description: isQuery ? '知识检索工作线 · 实例 01' : '知识工程工作线 · 实例 01',
             inputTokens: step.tokenUsed ?? 0,
             outputTokens: Math.floor((step.tokenUsed ?? 0) * 0.4),
             elapsed: activeTask.cost.elapsed,
             currentStep: activeTask.steps.filter((s) => s.status === 'done').length + 1,
-            totalSteps: 5,
+            totalSteps: activeTask.steps.length,
             skills: activeTask.steps.map((s) => ({
               name: s.skill,
               icon: s.skillIcon,

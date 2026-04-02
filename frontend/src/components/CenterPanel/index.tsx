@@ -57,12 +57,12 @@ export function CenterPanel({ isMock }: CenterPanelProps) {
     setIsProcessing(true);
     try {
       const { fileId } = await uploadFile(file);
-      setPendingFileId(fileId);
       await createTask(
         file.name,
         '提取关键概念、规则和关系，构建知识图谱',
         fileId
       );
+      setPendingFileId(null);
     } catch (err) {
       console.error('Failed to upload/create task:', err);
     } finally {

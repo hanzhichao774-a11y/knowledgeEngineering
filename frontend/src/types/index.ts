@@ -48,13 +48,14 @@ export interface AgentStatus {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'manager' | 'worker' | 'system';
+  role: 'user' | 'manager' | 'worker' | 'system' | 'assistant';
   name: string;
   content: string;
   timestamp: string;
   agentStatus?: AgentStatus;
   attachment?: FileAttachment;
   thinking?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface OntologyEntity {

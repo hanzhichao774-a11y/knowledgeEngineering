@@ -23,8 +23,12 @@ export interface SkillResult {
   duration: number;
 }
 
+export type TaskIntent = 'ingest' | 'query';
+
 export interface ExecutionContext {
   taskId: string;
+  intent: TaskIntent;
+  query?: string;
   fileId?: string;
   filePath?: string;
   previousResults: SkillResult[];

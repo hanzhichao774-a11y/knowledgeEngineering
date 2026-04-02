@@ -4,7 +4,7 @@ import { broadcast } from '../websocket/handler.js';
 import { ManagerAgent } from '../agents/ManagerAgent.js';
 import { storeGraphData } from './GraphService.js';
 import { getFilePath } from '../routes/upload.js';
-import type { AgentMessage, SkillResult, ExecutionContext } from '../agents/types.js';
+import type { AgentMessage, SkillResult, ExecutionContext, TaskIntent } from '../agents/types.js';
 
 export interface Step {
   name: string;
@@ -19,6 +19,7 @@ export interface Step {
 export interface Task {
   id: string;
   title: string;
+  intent?: TaskIntent;
   status: 'queued' | 'running' | 'completed' | 'failed';
   steps: Step[];
   cost: { inputTokens: number; outputTokens: number; estimatedCost: number; elapsed: string };
@@ -40,16 +41,22 @@ export interface TaskResult {
   summary: string;
   graphNodeCount: number;
   graphEdgeCount: number;
+  answer?: string;
 }
 
 const tasks = new Map<string, Task>();
 
-const DEFAULT_STEPS: Step[] = [
+const INGEST_STEPS: Step[] = [
   { name: '文档解析', status: 'pending', skill: '多模态文档解析', skillIcon: '📑', tokenUsed: 0, tokenLimit: 8000 },
   { name: '本体提取', status: 'pending', skill: '本体提取', skillIcon: '🔍', tokenUsed: 0, tokenLimit: 8000 },
   { name: 'Schema 构建', status: 'pending', skill: 'Schema 构建', skillIcon: '📊', tokenUsed: 0, tokenLimit: 8000 },
   { name: '写入图数据库', status: 'pending', skill: '图数据库写入', skillIcon: '💾', tokenUsed: 0, tokenLimit: 8000 },
   { name: '生成知识图谱', status: 'pending', skill: '知识图谱生成', skillIcon: '🕸️', tokenUsed: 0, tokenLimit: 8000 },
+];
+
+const QUERY_STEPS: Step[] = [
+  { name: '知识检索', status: 'pending', skill: '知识检索', skillIcon: '🔎', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '答案生成', status: 'pending', skill: '答案生成', skillIcon: '💡', tokenUsed: 0, tokenLimit: 8000 },
 ];
 
 const SKILL_ICONS: Record<string, string> = {
@@ -58,6 +65,8 @@ const SKILL_ICONS: Record<string, string> = {
   'Schema 构建': '📊',
   '图数据库写入': '💾',
   '知识图谱生成': '🕸️',
+  '知识检索': '🔎',
+  '答案生成': '💡',
 };
 
 export class TaskService {
@@ -76,11 +85,16 @@ export class TaskService {
   }
 
   async createTask(title: string, description?: string, fileId?: string): Promise<Task> {
+    const hasFile = !!fileId;
+    const initialSteps = hasFile
+      ? INGEST_STEPS.map((s) => ({ ...s }))
+      : QUERY_STEPS.map((s) => ({ ...s }));
+
     const task: Task = {
       id: randomUUID(),
       title,
       status: 'queued',
-      steps: DEFAULT_STEPS.map((s) => ({ ...s })),
+      steps: initialSteps,
       cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, elapsed: '0s' },
       createdAt: new Date().toISOString(),
       fileId,
@@ -111,14 +125,18 @@ export class TaskService {
 
     const ctx: ExecutionContext = {
       taskId,
+      intent: task.fileId ? 'ingest' : 'query',
+      query: task.title,
       fileId: task.fileId,
       filePath,
       previousResults: [],
       onProgress: (msg: AgentMessage) => {
         const stepIndex = msg.metadata?.stepIndex as number | undefined;
         if (stepIndex !== undefined && msg.content.includes('开始执行')) {
-          task.steps[stepIndex].status = 'running';
-          broadcast({ type: 'task.step.start', taskId, stepIndex });
+          if (task.steps[stepIndex]) {
+            task.steps[stepIndex].status = 'running';
+            broadcast({ type: 'task.step.start', taskId, stepIndex });
+          }
         }
 
         const skillName = msg.metadata?.skillName as string | undefined;
@@ -137,7 +155,7 @@ export class TaskService {
           message: {
             id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             role: msg.role === 'manager' ? 'manager' : 'worker',
-            name: msg.role === 'manager' ? '管理智能体' : '知识工程 #KE-01',
+            name: msg.role === 'manager' ? '管理智能体' : (ctx.intent === 'query' ? '知识检索 #QR-01' : '知识工程 #KE-01'),
             content: `<p>${msg.content}</p>`,
             timestamp: new Date().toTimeString().slice(0, 5),
             agentStatus,
@@ -180,6 +198,14 @@ export class TaskService {
 
     await this.manager.analyzeAndDispatch(ctx);
 
+    const actualIntent = ctx.intent;
+    task.intent = actualIntent;
+
+    if (actualIntent === 'query' && task.steps.length === 5) {
+      task.steps = QUERY_STEPS.map((s) => ({ ...s }));
+      broadcast({ type: 'task.steps.reset', taskId, steps: task.steps });
+    }
+
     const hasError = ctx.previousResults.some((r) => r.status === 'error');
     const failedSteps = task.steps
       .filter((s) => s.status === 'error')
@@ -190,6 +216,80 @@ export class TaskService {
       if (s.status === 'pending') s.status = 'skipped';
     });
 
+    task.status = hasError ? 'failed' : 'completed';
+
+    if (actualIntent === 'query') {
+      this.finalizeQueryTask(task, ctx, hasError, failedSteps, completedSteps);
+    } else {
+      this.finalizeIngestTask(task, ctx, hasError, failedSteps, completedSteps);
+    }
+
+    broadcast({ type: 'task.complete', taskId, status: task.status });
+  }
+
+  private finalizeQueryTask(
+    task: Task,
+    ctx: ExecutionContext,
+    hasError: boolean,
+    failedSteps: string[],
+    completedSteps: Step[],
+  ) {
+    const answerResult = ctx.previousResults.find((r) => r.skillName === '答案生成');
+    const retrieveResult = ctx.previousResults.find((r) => r.skillName === '知识检索');
+    const answerData = answerResult?.status === 'success' ? answerResult.data as Record<string, unknown> : undefined;
+    const retrieveData = retrieveResult?.status === 'success' ? retrieveResult.data as Record<string, unknown> : undefined;
+
+    const answer = (answerData?.answer as string) ?? '';
+    const basedOnResults = (answerData?.basedOnResults as number) ?? 0;
+
+    task.result = {
+      ontology: { entities: [], entityCount: 0, relationCount: 0, ruleCount: 0, attrCount: 0 },
+      schema: '',
+      summary: '',
+      graphNodeCount: 0,
+      graphEdgeCount: 0,
+      answer,
+    };
+
+    if (hasError) {
+      broadcast({
+        type: 'agent.message',
+        message: {
+          id: `msg-${Date.now()}`,
+          role: 'manager',
+          name: '管理智能体',
+          content: `<p>❌ <strong>知识检索失败</strong></p>
+<p>失败步骤：${failedSteps.join('、')}</p>
+<p>💰 已消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token</p>`,
+          timestamp: new Date().toTimeString().slice(0, 5),
+        },
+      });
+    } else {
+      broadcast({
+        type: 'agent.message',
+        message: {
+          id: `msg-answer-${Date.now()}`,
+          role: 'assistant',
+          name: '知识助手',
+          content: answer,
+          timestamp: new Date().toTimeString().slice(0, 5),
+          metadata: {
+            isAnswer: true,
+            basedOnResults,
+            source: (retrieveData?.source as string) ?? 'unknown',
+          },
+        },
+      });
+    }
+  }
+
+  private finalizeIngestTask(
+    task: Task,
+    ctx: ExecutionContext,
+    hasError: boolean,
+    failedSteps: string[],
+    completedSteps: Step[],
+  ) {
     const docResult = ctx.previousResults.find((r) => r.skillName === '多模态文档解析');
     const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
     const schemaResult = ctx.previousResults.find((r) => r.skillName === 'Schema 构建');
@@ -201,13 +301,12 @@ export class TaskService {
     const graphData = graphResult?.status === 'success' ? graphResult.data as Record<string, unknown> : undefined;
 
     if (graphData?.nodes && graphData?.edges) {
-      storeGraphData(taskId, {
+      storeGraphData(task.id, {
         nodes: graphData.nodes as Array<{ id: string; label: string; type: string }>,
         edges: graphData.edges as Array<{ source: string; target: string; label: string }>,
       });
     }
 
-    task.status = hasError ? 'failed' : 'completed';
     task.result = {
       ontology: {
         entities: (ontologyData?.entities as Array<{ name: string; type: string; desc: string }>) ?? [],
@@ -221,8 +320,6 @@ export class TaskService {
       graphNodeCount: (graphData?.nodeCount as number) ?? 0,
       graphEdgeCount: (graphData?.edgeCount as number) ?? 0,
     };
-
-    broadcast({ type: 'task.complete', taskId, status: task.status });
 
     if (hasError) {
       broadcast({

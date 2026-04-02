@@ -10,6 +10,7 @@ import { chatRoutes } from './routes/chat.js';
 import { graphRoutes } from './routes/graph.js';
 import { uploadRoutes } from './routes/upload.js';
 import { wsRoutes } from './websocket/handler.js';
+import { initNeo4j } from './db/neo4j.js';
 
 // Load .env file from backend root
 try {
@@ -54,6 +55,8 @@ async function start() {
   await app.register(graphRoutes, { prefix: '/api' });
   await app.register(uploadRoutes, { prefix: '/api' });
   await app.register(wsRoutes);
+
+  initNeo4j();
 
   const port = Number(process.env.PORT) || 3001;
   await app.listen({ port, host: '0.0.0.0' });

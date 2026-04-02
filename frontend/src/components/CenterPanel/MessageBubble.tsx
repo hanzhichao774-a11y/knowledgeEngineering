@@ -5,6 +5,7 @@ const avatarConfig: Record<string, { emoji: string; className: string }> = {
   user: { emoji: '👤', className: styles.avatarUser },
   manager: { emoji: '🧠', className: styles.avatarManager },
   worker: { emoji: '📝', className: styles.avatarWorker },
+  assistant: { emoji: '💡', className: styles.avatarAssistant },
   system: { emoji: '⚙️', className: styles.avatarSystem },
 };
 
@@ -12,6 +13,7 @@ const roleLabels: Record<string, { text: string; className: string }> = {
   user: { text: '用户', className: styles.roleUser },
   manager: { text: '管理', className: styles.roleManager },
   worker: { text: '数字员工', className: styles.roleWorker },
+  assistant: { text: '知识助手', className: styles.roleAssistant },
   system: { text: '系统', className: styles.roleSystem },
 };
 
