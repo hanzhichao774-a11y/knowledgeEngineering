@@ -1,0 +1,696 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BizAgentOS · 知识工程数字员工</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-secondary: #161822;
+  --bg-tertiary: #1c1f2e;
+  --bg-hover: #252840;
+  --border: #2a2d3e;
+  --text: #e4e4e7;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --green: #22c55e;
+  --green-bg: rgba(34,197,94,.12);
+  --yellow: #eab308;
+  --yellow-bg: rgba(234,179,8,.12);
+  --blue: #3b82f6;
+  --blue-bg: rgba(59,130,246,.12);
+  --red: #ef4444;
+  --purple: #a855f7;
+  --purple-bg: rgba(168,85,247,.12);
+  --orange: #f97316;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; }
+
+.app { display:grid; grid-template-rows: 48px 1fr 32px; height:100vh; }
+
+/* Header */
+.header { display:flex; align-items:center; justify-content:space-between; padding:0 16px; background:var(--bg-secondary); border-bottom:1px solid var(--border); z-index:10; }
+.header-left { display:flex; align-items:center; gap:12px; }
+.logo { font-size:14px; font-weight:700; color:var(--accent-light); letter-spacing:-.5px; }
+.logo span { color:var(--text-muted); font-weight:400; font-size:12px; margin-left:6px; }
+.header-right { display:flex; align-items:center; gap:12px; }
+.status-dot { width:8px; height:8px; border-radius:50%; background:var(--green); display:inline-block; }
+.header-tag { font-size:11px; padding:2px 8px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; color:var(--text-secondary); }
+
+/* Main */
+.main { display:grid; grid-template-columns: 260px 1fr 380px; overflow:hidden; }
+
+/* Left Panel */
+.left-panel { background:var(--bg-secondary); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.panel-header { padding:12px 16px; font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.panel-header .count { background:var(--accent); color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; }
+
+.task-list { flex:1; overflow-y:auto; padding:8px; }
+.task-item { padding:10px 12px; border-radius:var(--radius); cursor:pointer; margin-bottom:4px; transition:background .15s; }
+.task-item:hover { background:var(--bg-hover); }
+.task-item.active { background:var(--accent); background:linear-gradient(135deg, rgba(99,102,241,.2), rgba(99,102,241,.08)); border:1px solid rgba(99,102,241,.3); }
+.task-title { font-size:13px; font-weight:500; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.task-meta { font-size:11px; color:var(--text-muted); display:flex; gap:8px; }
+
+.step-list { border-top:1px solid var(--border); padding:12px 16px; }
+.step-list h4 { font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+.step { display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; position:relative; }
+.step:not(:last-child)::after { content:''; position:absolute; left:9px; top:22px; bottom:-8px; width:1px; background:var(--border); }
+.step-dot { width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; margin-top:1px; }
+.step-dot.done { background:var(--green-bg); color:var(--green); }
+.step-dot.running { background:var(--yellow-bg); color:var(--yellow); animation:pulse 1.5s infinite; }
+.step-dot.pending { background:var(--bg-tertiary); color:var(--text-muted); border:1px solid var(--border); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.step-info { flex:1; }
+.step-name { font-size:12px; font-weight:500; }
+.step-time { font-size:10px; color:var(--text-muted); margin-top:2px; }
+
+.cost-panel { border-top:1px solid var(--border); padding:12px 16px; }
+.cost-panel h4 { font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+.cost-row { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; }
+.cost-label { color:var(--text-muted); }
+.cost-val { font-weight:500; font-variant-numeric:tabular-nums; }
+.cost-val.green { color:var(--green); }
+
+/* Center Panel */
+.center-panel { display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
+.chat-area { flex:1; overflow-y:auto; padding:20px 24px; }
+
+.msg { margin-bottom:16px; display:flex; gap:10px; }
+.msg-avatar { width:32px; height:32px; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+.msg-avatar.user { background:var(--blue-bg); }
+.msg-avatar.manager { background:var(--purple-bg); }
+.msg-avatar.worker { background:var(--green-bg); }
+.msg-avatar.system { background:var(--bg-tertiary); }
+.msg-body { flex:1; min-width:0; }
+.msg-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.msg-name { font-size:12px; font-weight:600; }
+.msg-role { font-size:10px; padding:1px 6px; border-radius:4px; }
+.msg-role.manager { background:var(--purple-bg); color:var(--purple); }
+.msg-role.worker { background:var(--green-bg); color:var(--green); }
+.msg-role.user { background:var(--blue-bg); color:var(--blue); }
+.msg-time { font-size:10px; color:var(--text-muted); margin-left:auto; }
+.msg-content { font-size:13px; line-height:1.6; color:var(--text); }
+.msg-content p { margin-bottom:6px; }
+
+.agent-status-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius); padding:12px; margin-top:8px; }
+.agent-status-row { display:flex; align-items:center; gap:8px; font-size:12px; margin-bottom:6px; }
+.agent-status-row:last-child { margin-bottom:0; }
+.agent-status-label { color:var(--text-muted); min-width:60px; }
+.skill-tag { font-size:10px; padding:2px 6px; border-radius:4px; background:var(--accent); background:rgba(99,102,241,.15); color:var(--accent-light); }
+.token-bar { flex:1; height:4px; background:var(--bg-tertiary); border-radius:2px; overflow:hidden; }
+.token-bar-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .5s; }
+
+.thinking-indicator { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius); margin-top:8px; font-size:12px; color:var(--text-secondary); }
+.thinking-dots span { display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--accent-light); margin:0 1px; animation:bounce .6s infinite; }
+.thinking-dots span:nth-child(2) { animation-delay:.15s; }
+.thinking-dots span:nth-child(3) { animation-delay:.3s; }
+@keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+.input-area { padding:12px 24px; border-top:1px solid var(--border); }
+.input-wrap { display:flex; align-items:center; gap:8px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:8px 12px; transition:border-color .2s; }
+.input-wrap:focus-within { border-color:var(--accent); }
+.input-wrap input { flex:1; background:none; border:none; outline:none; color:var(--text); font-size:13px; }
+.input-wrap input::placeholder { color:var(--text-muted); }
+.input-wrap .upload-btn { width:32px; height:32px; border-radius:var(--radius); background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-secondary); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all .15s; }
+.input-wrap .upload-btn:hover { background:var(--bg-hover); color:var(--text); }
+.send-btn { width:32px; height:32px; border-radius:var(--radius); background:var(--accent); border:none; color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all .15s; }
+.send-btn:hover { background:var(--accent-light); }
+
+/* Right Panel */
+.right-panel { background:var(--bg-secondary); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.right-tabs { display:flex; border-bottom:1px solid var(--border); padding:0 12px; }
+.right-tab { padding:10px 12px; font-size:12px; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; white-space:nowrap; }
+.right-tab:hover { color:var(--text); }
+.right-tab.active { color:var(--accent-light); border-bottom-color:var(--accent); }
+.right-content { flex:1; overflow-y:auto; padding:16px; }
+
+/* Result Cards */
+.result-card { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; overflow:hidden; }
+.result-card-header { padding:10px 12px; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border); cursor:pointer; }
+.result-card-header:hover { background:var(--bg-hover); }
+.result-icon { font-size:14px; }
+.result-title { font-size:12px; font-weight:500; flex:1; }
+.result-badge { font-size:10px; padding:2px 6px; border-radius:4px; }
+.result-badge.success { background:var(--green-bg); color:var(--green); }
+.result-badge.running { background:var(--yellow-bg); color:var(--yellow); }
+.result-card-body { padding:12px; }
+
+/* Schema Table */
+.schema-table { width:100%; font-size:11px; border-collapse:collapse; }
+.schema-table th { text-align:left; padding:6px 8px; background:var(--bg); color:var(--text-secondary); font-weight:500; border-bottom:1px solid var(--border); }
+.schema-table td { padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text); }
+.schema-table tr:hover td { background:var(--bg-hover); }
+.type-tag { font-size:10px; padding:1px 4px; border-radius:3px; font-family:monospace; }
+.type-tag.entity { background:var(--blue-bg); color:var(--blue); }
+.type-tag.relation { background:var(--orange); background:rgba(249,115,22,.12); color:var(--orange); }
+.type-tag.attr { background:var(--purple-bg); color:var(--purple); }
+
+/* Graph Preview */
+.graph-preview { height:200px; background:var(--bg); border-radius:var(--radius); position:relative; overflow:hidden; }
+.graph-node { position:absolute; padding:6px 10px; border-radius:var(--radius); font-size:11px; font-weight:500; border:1px solid; cursor:pointer; transition:transform .2s; }
+.graph-node:hover { transform:scale(1.08); z-index:2; }
+.graph-node.entity { background:var(--blue-bg); border-color:rgba(59,130,246,.3); color:var(--blue); }
+.graph-node.concept { background:var(--green-bg); border-color:rgba(34,197,94,.3); color:var(--green); }
+.graph-node.rule { background:var(--purple-bg); border-color:rgba(168,85,247,.3); color:var(--purple); }
+.graph-svg { position:absolute; inset:0; pointer-events:none; }
+
+/* Agent Detail */
+.agent-detail { margin-bottom:12px; }
+.agent-detail-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.agent-avatar-lg { width:40px; height:40px; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; font-size:20px; }
+.agent-detail-info h3 { font-size:13px; font-weight:600; }
+.agent-detail-info p { font-size:11px; color:var(--text-muted); }
+.metric-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.metric-card { background:var(--bg); border-radius:var(--radius); padding:10px; }
+.metric-label { font-size:10px; color:var(--text-muted); margin-bottom:4px; }
+.metric-value { font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+.metric-value.green { color:var(--green); }
+.metric-value.blue { color:var(--blue); }
+.metric-value.purple { color:var(--purple); }
+.metric-value.yellow { color:var(--yellow); }
+
+/* Skill List */
+.skill-list-item { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.skill-list-item:last-child { border-bottom:none; }
+.skill-dot { width:6px; height:6px; border-radius:50%; }
+.skill-dot.active { background:var(--green); }
+.skill-dot.idle { background:var(--text-muted); }
+
+/* Footer */
+.footer { display:flex; align-items:center; justify-content:center; padding:0 16px; font-size:11px; color:var(--text-muted); background:var(--bg-secondary); border-top:1px solid var(--border); gap:8px; }
+.footer a { color:var(--accent-light); text-decoration:none; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
+
+/* File upload preview */
+.file-preview { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius); margin-top:6px; font-size:12px; }
+.file-icon { font-size:18px; }
+.file-info { flex:1; }
+.file-name { font-weight:500; }
+.file-size { font-size:10px; color:var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">BizAgentOS<span>· 管理智能体</span></div>
+    </div>
+    <div class="header-right">
+      <span class="header-tag"><span class="status-dot" style="margin-right:4px"></span>系统正常</span>
+      <span class="header-tag">MiniMax</span>
+      <span class="header-tag">👤 张闯</span>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Left Panel: Task List + Steps -->
+    <div class="left-panel">
+      <div class="panel-header">
+        任务列表
+        <span class="count">3</span>
+      </div>
+      <div class="task-list">
+        <div class="task-item active" onclick="selectTask(0)">
+          <div class="task-title">📄 企业信息安全管理制度.pdf</div>
+          <div class="task-meta"><span>🔄 执行中</span><span>2 分钟前</span></div>
+        </div>
+        <div class="task-item" onclick="selectTask(1)">
+          <div class="task-title">📄 数据分类分级标准.docx</div>
+          <div class="task-meta"><span>✅ 已完成</span><span>15 分钟前</span></div>
+        </div>
+        <div class="task-item" onclick="selectTask(2)">
+          <div class="task-title">📄 员工入职流程规范.pdf</div>
+          <div class="task-meta"><span>⏳ 排队中</span><span>1 分钟前</span></div>
+        </div>
+      </div>
+
+      <!-- Steps -->
+      <div class="step-list">
+        <h4>执行进度</h4>
+        <div class="step">
+          <div class="step-dot done">✓</div>
+          <div class="step-info">
+            <div class="step-name">文档解析</div>
+            <div class="step-time">耗时 3.2s · 1,247 tokens</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot done">✓</div>
+          <div class="step-info">
+            <div class="step-name">本体提取</div>
+            <div class="step-time">耗时 8.5s · 3,891 tokens</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot running">⟳</div>
+          <div class="step-info">
+            <div class="step-name" style="color:var(--yellow)">Schema 构建</div>
+            <div class="step-time">进行中...</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot pending"></div>
+          <div class="step-info">
+            <div class="step-name" style="color:var(--text-muted)">写入图数据库</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot pending"></div>
+          <div class="step-info">
+            <div class="step-name" style="color:var(--text-muted)">生成知识图谱</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cost -->
+      <div class="cost-panel">
+        <h4>资源消耗</h4>
+        <div class="cost-row"><span class="cost-label">输入 Token</span><span class="cost-val">5,138</span></div>
+        <div class="cost-row"><span class="cost-label">输出 Token</span><span class="cost-val">2,764</span></div>
+        <div class="cost-row"><span class="cost-label">预估费用</span><span class="cost-val green">¥ 0.42</span></div>
+        <div class="cost-row"><span class="cost-label">已用时间</span><span class="cost-val">1m 28s</span></div>
+      </div>
+    </div>
+
+    <!-- Center Panel: Chat -->
+    <div class="center-panel">
+      <div class="chat-area" id="chatArea">
+        <!-- User Message -->
+        <div class="msg">
+          <div class="msg-avatar user">👤</div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name">张闯</span>
+              <span class="msg-role user">用户</span>
+              <span class="msg-time">14:32</span>
+            </div>
+            <div class="msg-content">
+              <p>请帮我处理这份企业信息安全管理制度文档，提取其中的关键概念、规则和关系，构建知识图谱。</p>
+              <div class="file-preview">
+                <span class="file-icon">📄</span>
+                <div class="file-info">
+                  <div class="file-name">企业信息安全管理制度.pdf</div>
+                  <div class="file-size">2.4 MB · 38 页</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manager Agent -->
+        <div class="msg">
+          <div class="msg-avatar manager">🧠</div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name">管理智能体</span>
+              <span class="msg-role manager">管理</span>
+              <span class="msg-time">14:32</span>
+            </div>
+            <div class="msg-content">
+              <p>收到任务。已分析文档类型为 <strong>企业制度文本（PDF）</strong>，属于知识工程工作线范围。</p>
+              <p>正在进行 Skill 覆盖检查...</p>
+              <p>✅ 知识工程数字员工 <strong>#KE-01</strong> 具备所需能力：</p>
+              <p>• 文档解析（多模态） · 本体提取 · Schema 构建 · 图数据库写入</p>
+              <p>📋 <strong>任务已委派</strong> → 知识工程数字员工 #KE-01</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 1: Document Parsing -->
+        <div class="msg">
+          <div class="msg-avatar worker">📝</div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name">知识工程 #KE-01</span>
+              <span class="msg-role worker">数字员工</span>
+              <span class="msg-time">14:32</span>
+            </div>
+            <div class="msg-content">
+              <p><strong>Step 1/5 · 文档解析</strong></p>
+              <p>正在解析 PDF 文档...</p>
+              <div class="agent-status-card">
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Skill</span>
+                  <span class="skill-tag">📑 多模态文档解析</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Token</span>
+                  <div class="token-bar"><div class="token-bar-fill" style="width:15%"></div></div>
+                  <span style="font-size:11px;color:var(--text-muted)">1,247 / 8,000</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">状态</span>
+                  <span style="color:var(--green);font-size:12px">✅ 完成 · 3.2s</span>
+                </div>
+              </div>
+              <p style="margin-top:8px;color:var(--text-secondary);font-size:12px">已识别 38 页内容，提取 7 个章节、42 个段落、15 张表格。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Ontology Extraction -->
+        <div class="msg">
+          <div class="msg-avatar worker">📝</div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name">知识工程 #KE-01</span>
+              <span class="msg-role worker">数字员工</span>
+              <span class="msg-time">14:33</span>
+            </div>
+            <div class="msg-content">
+              <p><strong>Step 2/5 · 本体提取</strong></p>
+              <p>正在从文档中提取概念、术语、规则和关系...</p>
+              <div class="agent-status-card">
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Skill</span>
+                  <span class="skill-tag">🔍 本体提取</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Token</span>
+                  <div class="token-bar"><div class="token-bar-fill" style="width:48%"></div></div>
+                  <span style="font-size:11px;color:var(--text-muted)">3,891 / 8,000</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">状态</span>
+                  <span style="color:var(--green);font-size:12px">✅ 完成 · 8.5s</span>
+                </div>
+              </div>
+              <p style="margin-top:8px;color:var(--text-secondary);font-size:12px">已提取 <strong>18 个实体</strong>、<strong>12 条关系</strong>、<strong>9 条规则</strong>、<strong>25 个属性</strong>。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Schema (Running) -->
+        <div class="msg">
+          <div class="msg-avatar worker">📝</div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name">知识工程 #KE-01</span>
+              <span class="msg-role worker">数字员工</span>
+              <span class="msg-time">14:33</span>
+            </div>
+            <div class="msg-content">
+              <p><strong>Step 3/5 · Schema 构建</strong></p>
+              <p>基于提取结果构建结构化 Schema...</p>
+              <div class="agent-status-card">
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Skill</span>
+                  <span class="skill-tag">📊 Schema 构建</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">Token</span>
+                  <div class="token-bar"><div class="token-bar-fill" style="width:64%"></div></div>
+                  <span style="font-size:11px;color:var(--text-muted)">5,138 / 8,000</span>
+                </div>
+                <div class="agent-status-row">
+                  <span class="agent-status-label">状态</span>
+                  <span style="color:var(--yellow);font-size:12px">⟳ 执行中...</span>
+                </div>
+              </div>
+              <div class="thinking-indicator">
+                <div class="thinking-dots"><span></span><span></span><span></span></div>
+                正在构建实体关系 Schema...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-area">
+        <div class="input-wrap">
+          <button class="upload-btn" title="上传文档">📎</button>
+          <input type="text" placeholder="输入任务指令，或上传文档..." id="chatInput" onkeydown="if(event.key==='Enter')sendMsg()">
+          <button class="send-btn" onclick="sendMsg()">↑</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel: Results -->
+    <div class="right-panel">
+      <div class="right-tabs">
+        <div class="right-tab active" onclick="switchRightTab(this,'result')">📊 产出结果</div>
+        <div class="right-tab" onclick="switchRightTab(this,'agent')">🧠 智能体</div>
+        <div class="right-tab" onclick="switchRightTab(this,'graph')">🕸️ 图谱</div>
+      </div>
+      <div class="right-content" id="rightContent">
+        <!-- Result Tab -->
+        <div id="tab-result">
+          <!-- Ontology Extraction Result -->
+          <div class="result-card">
+            <div class="result-card-header">
+              <span class="result-icon">🔍</span>
+              <span class="result-title">本体提取结果</span>
+              <span class="result-badge success">已完成</span>
+            </div>
+            <div class="result-card-body">
+              <table class="schema-table">
+                <thead>
+                  <tr><th>名称</th><th>类型</th><th>描述</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>信息安全策略</td><td><span class="type-tag entity">实体</span></td><td>组织信息安全总体方针</td></tr>
+                  <tr><td>安全等级</td><td><span class="type-tag attr">属性</span></td><td>机密/秘密/内部/公开</td></tr>
+                  <tr><td>数据分类</td><td><span class="type-tag entity">实体</span></td><td>按敏感程度划分数据类别</td></tr>
+                  <tr><td>访问控制</td><td><span class="type-tag entity">实体</span></td><td>用户权限管理机制</td></tr>
+                  <tr><td>管辖</td><td><span class="type-tag relation">关系</span></td><td>安全策略 → 数据分类</td></tr>
+                  <tr><td>约束</td><td><span class="type-tag relation">关系</span></td><td>访问控制 → 安全等级</td></tr>
+                </tbody>
+              </table>
+              <p style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:right">共 18 个实体 · 12 条关系 · 点击查看全部 →</p>
+            </div>
+          </div>
+
+          <!-- Schema Building -->
+          <div class="result-card">
+            <div class="result-card-header">
+              <span class="result-icon">📊</span>
+              <span class="result-title">Schema 构建</span>
+              <span class="result-badge running">构建中</span>
+            </div>
+            <div class="result-card-body">
+              <div style="font-family:monospace;font-size:11px;background:var(--bg);padding:10px;border-radius:var(--radius);color:var(--text-secondary);line-height:1.7">
+<span style="color:var(--purple)">@prefix</span> biz: &lt;http://bizagentos.ai/ontology/&gt; .<br>
+<span style="color:var(--purple)">@prefix</span> rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt; .<br>
+<br>
+biz:<span style="color:var(--blue)">SecurityPolicy</span> a rdfs:Class ;<br>
+&nbsp;&nbsp;rdfs:label <span style="color:var(--green)">"信息安全策略"</span> ;<br>
+&nbsp;&nbsp;biz:level [<span style="color:var(--yellow)"> "机密", "秘密", "内部", "公开" </span>] .<br>
+<br>
+biz:<span style="color:var(--blue)">DataClassification</span> a rdfs:Class ;<br>
+&nbsp;&nbsp;rdfs:label <span style="color:var(--green)">"数据分类"</span> .<br>
+<br>
+<span style="color:var(--text-muted)">// 构建中... 已完成 60%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Document Summary -->
+          <div class="result-card">
+            <div class="result-card-header">
+              <span class="result-icon">📄</span>
+              <span class="result-title">文档摘要</span>
+              <span class="result-badge success">已完成</span>
+            </div>
+            <div class="result-card-body" style="font-size:12px;color:var(--text-secondary);line-height:1.6">
+              本文档为企业信息安全管理制度，共 7 章 38 页，涵盖：信息安全策略、数据分类分级、访问控制、网络安全、物理安全、安全事件管理、合规审计。核心规定了四级安全等级体系和基于角色的访问控制模型。
+              <div style="margin-top:8px"><a href="#" style="color:var(--accent-light);font-size:11px;text-decoration:none">📎 查看原文 →</a></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Agent Tab (hidden) -->
+        <div id="tab-agent" style="display:none">
+          <div class="agent-detail">
+            <div class="agent-detail-header">
+              <div class="agent-avatar-lg" style="background:var(--green-bg)">📝</div>
+              <div class="agent-detail-info">
+                <h3>知识工程数字员工 #KE-01</h3>
+                <p>知识工程工作线 · 实例 01</p>
+              </div>
+            </div>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <div class="metric-label">输入 Token</div>
+                <div class="metric-value blue">5,138</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">输出 Token</div>
+                <div class="metric-value purple">2,764</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">执行耗时</div>
+                <div class="metric-value yellow">1m 28s</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">当前步骤</div>
+                <div class="metric-value green">3 / 5</div>
+              </div>
+            </div>
+          </div>
+          <div class="result-card" style="margin-top:12px">
+            <div class="result-card-header">
+              <span class="result-icon">🛠️</span>
+              <span class="result-title">已挂载 Skills</span>
+            </div>
+            <div class="result-card-body">
+              <div class="skill-list-item"><span class="skill-dot active"></span>📑 多模态文档解析<span style="margin-left:auto;font-size:10px;color:var(--green)">使用中</span></div>
+              <div class="skill-list-item"><span class="skill-dot active"></span>🔍 本体提取<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">已完成</span></div>
+              <div class="skill-list-item"><span class="skill-dot active"></span>📊 Schema 构建<span style="margin-left:auto;font-size:10px;color:var(--yellow)">执行中</span></div>
+              <div class="skill-list-item"><span class="skill-dot idle"></span>💾 图数据库写入<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">待执行</span></div>
+              <div class="skill-list-item"><span class="skill-dot idle"></span>🕸️ 知识图谱生成<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">待执行</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Graph Tab (hidden) -->
+        <div id="tab-graph" style="display:none">
+          <div class="result-card">
+            <div class="result-card-header">
+              <span class="result-icon">🕸️</span>
+              <span class="result-title">知识图谱预览</span>
+              <span class="result-badge success">18 节点 · 12 边</span>
+            </div>
+            <div class="result-card-body" style="padding:0">
+              <div class="graph-preview" id="graphPreview">
+                <svg class="graph-svg" id="graphSvg"></svg>
+                <div class="graph-node entity" style="left:140px;top:20px" id="gn1">信息安全策略</div>
+                <div class="graph-node concept" style="left:40px;top:90px" id="gn2">数据分类</div>
+                <div class="graph-node concept" style="left:220px;top:90px" id="gn3">访问控制</div>
+                <div class="graph-node rule" style="left:20px;top:155px" id="gn4">安全等级</div>
+                <div class="graph-node entity" style="left:140px;top:155px" id="gn5">网络安全</div>
+                <div class="graph-node concept" style="left:260px;top:155px" id="gn6">审计日志</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:8px 0">
+            <p style="font-size:11px;color:var(--text-muted);line-height:1.6">
+              图谱将在 Step 5 完成后更新完整版本。当前展示基于本体提取结果生成的预览。
+            </p>
+            <button style="margin-top:8px;width:100%;padding:8px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);color:var(--accent-light);font-size:12px;cursor:pointer">🔗 在图数据库中查看完整图谱 →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    BizAgentOS v0.1.0 · Powered by <a href="#">KodaX</a> · 知识工程工作线
+  </footer>
+</div>
+
+<script>
+function switchRightTab(el, tabId) {
+  document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('#rightContent > div[id^="tab-"]').forEach(d => d.style.display = 'none');
+  document.getElementById('tab-' + tabId).style.display = 'block';
+  if (tabId === 'graph') setTimeout(drawGraphLines, 50);
+}
+
+function selectTask(idx) {
+  document.querySelectorAll('.task-item').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+}
+
+function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const chat = document.getElementById('chatArea');
+  const html = `<div class="msg">
+    <div class="msg-avatar user">👤</div>
+    <div class="msg-body">
+      <div class="msg-header">
+        <span class="msg-name">张闯</span>
+        <span class="msg-role user">用户</span>
+        <span class="msg-time">${new Date().toTimeString().slice(0,5)}</span>
+      </div>
+      <div class="msg-content"><p>${escHtml(text)}</p></div>
+    </div>
+  </div>`;
+  chat.insertAdjacentHTML('beforeend', html);
+  input.value = '';
+  chat.scrollTop = chat.scrollHeight;
+  setTimeout(() => {
+    const reply = `<div class="msg">
+      <div class="msg-avatar manager">🧠</div>
+      <div class="msg-body">
+        <div class="msg-header">
+          <span class="msg-name">管理智能体</span>
+          <span class="msg-role manager">管理</span>
+          <span class="msg-time">${new Date().toTimeString().slice(0,5)}</span>
+        </div>
+        <div class="msg-content"><p>收到指令。正在分析任务并分派给合适的数字员工...</p></div>
+      </div>
+    </div>`;
+    chat.insertAdjacentHTML('beforeend', reply);
+    chat.scrollTop = chat.scrollHeight;
+  }, 800);
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function drawGraphLines() {
+  const svg = document.getElementById('graphSvg');
+  if (!svg) return;
+  const container = document.getElementById('graphPreview');
+  const rect = container.getBoundingClientRect();
+  svg.setAttribute('width', rect.width);
+  svg.setAttribute('height', rect.height);
+
+  const connections = [
+    ['gn1', 'gn2', '管辖'],
+    ['gn1', 'gn3', '包含'],
+    ['gn2', 'gn4', '定义'],
+    ['gn3', 'gn6', '记录'],
+    ['gn1', 'gn5', '覆盖'],
+    ['gn4', 'gn5', '约束'],
+  ];
+
+  let paths = '';
+  connections.forEach(([fromId, toId, label]) => {
+    const from = document.getElementById(fromId);
+    const to = document.getElementById(toId);
+    if (!from || !to) return;
+    const fR = from.getBoundingClientRect();
+    const tR = to.getBoundingClientRect();
+    const x1 = fR.left - rect.left + fR.width / 2;
+    const y1 = fR.top - rect.top + fR.height / 2;
+    const x2 = tR.left - rect.left + tR.width / 2;
+    const y2 = tR.top - rect.top + tR.height / 2;
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    paths += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(99,102,241,.3)" stroke-width="1"/>`;
+    paths += `<text x="${mx}" y="${my - 4}" fill="rgba(99,102,241,.6)" font-size="9" text-anchor="middle">${label}</text>`;
+  });
+  svg.innerHTML = paths;
+}
+
+window.addEventListener('resize', () => {
+  if (document.getElementById('tab-graph').style.display !== 'none') drawGraphLines();
+});
+</script>
+</body>
+</html>

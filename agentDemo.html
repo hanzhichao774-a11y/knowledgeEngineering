@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BizAgentOS · 管理智能体操作台</title>
+  <style>
+    :root {
+      --bg: #f0f2f5;
+      --panel: #ffffff;
+      --line: #e2e6ea;
+      --text: #1a1d21;
+      --muted: #6b7280;
+      --brand: #2563eb;
+      --brand-light: #dbeafe;
+      --brand-dark: #1d4ed8;
+      --ok: #059669;
+      --ok-bg: #d1fae5;
+      --warn: #d97706;
+      --warn-bg: #fef3c7;
+      --danger: #dc2626;
+      --danger-bg: #fee2e2;
+      --purple: #7c3aed;
+      --purple-bg: #ede9fe;
+      --sidebar-bg: #111827;
+      --sidebar-text: #d1d5db;
+      --sidebar-active: #1f2937;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+    .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar { background: var(--sidebar-bg); color: var(--sidebar-text); padding: 20px 12px; display: flex; flex-direction: column; }
+    .sidebar .logo { display: flex; align-items: center; gap: 10px; padding: 0 8px 20px; border-bottom: 1px solid #374151; margin-bottom: 12px; }
+    .sidebar .logo svg { width: 28px; height: 28px; }
+    .sidebar .logo span { font-size: 15px; font-weight: 700; color: #f9fafb; }
+    .sidebar nav a {
+      display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+      color: var(--sidebar-text); text-decoration: none; font-size: 13px; transition: all .15s;
+    }
+    .sidebar nav a:hover { background: var(--sidebar-active); color: #f9fafb; }
+    .sidebar nav a.active { background: var(--brand); color: #fff; }
+    .sidebar nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .sidebar .env-tag { margin-top: auto; padding: 8px 12px; background: #1f2937; border-radius: 8px; font-size: 11px; color: #9ca3af; text-align: center; }
+
+    /* Main */
+    .main { padding: 24px 28px; overflow-y: auto; max-height: 100vh; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Header */
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .page-header h1 { font-size: 20px; font-weight: 700; }
+    .page-header .subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+    /* KPI Cards */
+    .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    .kpi-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .kpi-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .kpi-card .value { font-size: 28px; font-weight: 700; }
+    .kpi-card .trend { font-size: 12px; margin-top: 4px; }
+    .kpi-card .trend.up { color: var(--ok); }
+    .kpi-card .trend.down { color: var(--danger); }
+
+    /* Panel */
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .panel-header h3 { font-size: 15px; font-weight: 600; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; }
+    .btn-primary { background: var(--brand); color: #fff; }
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-secondary { background: #f3f4f6; color: var(--text); border: 1px solid var(--line); }
+    .btn-secondary:hover { background: #e5e7eb; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-icon { background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; color: var(--muted); }
+    .btn-icon:hover { background: #f3f4f6; color: var(--text); }
+
+    /* Tags */
+    .tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+    .tag-ok { background: var(--ok-bg); color: var(--ok); }
+    .tag-warn { background: var(--warn-bg); color: var(--warn); }
+    .tag-danger { background: var(--danger-bg); color: var(--danger); }
+    .tag-brand { background: var(--brand-light); color: var(--brand); }
+    .tag-purple { background: var(--purple-bg); color: var(--purple); }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    td { padding: 12px; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+    tr:hover td { background: #f9fafb; }
+
+    /* Form */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 12px; font-weight: 500; color: var(--muted); }
+    .form-group input, .form-group select, .form-group textarea {
+      padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+      font-family: inherit; background: #fff; transition: border-color .15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+    /* Flow canvas */
+    .flow-canvas {
+      background: #fafbfc; border: 2px dashed var(--line); border-radius: var(--radius);
+      min-height: 460px; padding: 24px; position: relative; overflow: visible;
+    }
+    .flow-canvas svg.flow-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+    .flow-node {
+      background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
+      padding: 14px 18px; position: absolute; cursor: grab; min-width: 180px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06); transition: box-shadow .15s; z-index: 1;
+    }
+    .flow-node:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+    .flow-node.manager { border-color: var(--brand); background: var(--brand-light); }
+    .flow-node.sub { border-color: var(--ok); }
+    .flow-node.external { border-color: var(--purple); border-style: dashed; }
+    .flow-node .node-type { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .flow-node.manager .node-type { color: var(--brand); }
+    .flow-node.sub .node-type { color: var(--ok); }
+    .flow-node.external .node-type { color: var(--purple); }
+    .flow-node .node-name { font-size: 14px; font-weight: 600; }
+    .flow-node .node-desc { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .flow-step-num {
+      position: absolute; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--brand); color: #fff; font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; z-index: 2;
+    }
+
+    /* Agent card grid */
+    .agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .agent-card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; box-shadow: var(--shadow); transition: all .15s; cursor: pointer;
+    }
+    .agent-card:hover { border-color: var(--brand); box-shadow: 0 4px 12px rgba(37,99,235,.1); }
+    .agent-card .agent-icon {
+      width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 18px; margin-bottom: 12px;
+    }
+    .agent-card .agent-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .agent-card .agent-desc { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .agent-card .agent-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* Timeline */
+    .timeline { position: relative; padding-left: 24px; }
+    .timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+    .timeline-item { position: relative; padding-bottom: 18px; }
+    .timeline-item::before {
+      content: ''; position: absolute; left: -20px; top: 4px; width: 12px; height: 12px;
+      border-radius: 50%; border: 2px solid var(--brand); background: #fff;
+    }
+    .timeline-item.done::before { background: var(--brand); }
+    .timeline-item.running::before { background: var(--warn); border-color: var(--warn); animation: pulse 1.5s infinite; }
+    .timeline-item .tl-time { font-size: 11px; color: var(--muted); }
+    .timeline-item .tl-title { font-size: 13px; font-weight: 500; margin: 2px 0; }
+    .timeline-item .tl-detail { font-size: 12px; color: var(--muted); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      z-index: 100; align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--panel); border-radius: 14px; padding: 24px; width: 560px;
+      max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+    .modal.modal-lg { width: 780px; }
+    .modal h2 { font-size: 18px; margin-bottom: 16px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--line); margin-bottom: 16px; }
+    .tab { padding: 10px 18px; font-size: 13px; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; background: none; border-top: none; border-left: none; border-right: none; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Code editor */
+    .code-editor {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 12px;
+      line-height: 1.7; padding: 14px; border: 1px solid var(--line); border-radius: 8px;
+      background: #1e1e2e; color: #cdd6f4; min-height: 160px; resize: vertical;
+      white-space: pre-wrap; width: 100%;
+    }
+    .code-editor:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+
+    /* Chat */
+    .chat-box { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; height: 340px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fafbfc; }
+    .chat-msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; }
+    .chat-msg.user { align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }
+    .chat-msg.agent { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+    .chat-msg .msg-role { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; opacity: .7; }
+    .chat-msg.agent .msg-role { color: var(--brand); }
+    .chat-input-row { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: #fff; }
+    .chat-input-row input { flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+    .chat-input-row input:focus { outline: none; border-color: var(--brand); }
+    .chat-typing { font-size: 12px; color: var(--muted); padding: 4px 0; }
+    .chat-typing .dot { display: inline-block; animation: dotPulse 1.4s infinite; }
+    .chat-typing .dot:nth-child(2) { animation-delay: .2s; }
+    .chat-typing .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes dotPulse { 0%,80%,100%{opacity:.3} 40%{opacity:1} }
+
+    /* Stat bar */
+    .stat-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+    .stat-bar-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+
+    /* Breadcrumb */
+    .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+    .breadcrumb a { color: var(--brand); text-decoration: none; cursor: pointer; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* Misc */
+    .divider { height: 1px; background: var(--line); margin: 16px 0; }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--brand-light); color: var(--brand); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+
+    @media (max-width: 640px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="#2563eb"/><path d="M8 14h12M14 8v12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <span>BizAgentOS</span>
+    </div>
+    <nav>
+      <a href="#" class="active" data-page="overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        运营总览
+      </a>
+      <a href="#" data-page="agents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+        智能体管理
+      </a>
+      <a href="#" data-page="orchestration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="3" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="3" cy="12" r="2"/><circle cx="21" cy="12" r="2"/></svg>
+        流程编排
+      </a>
+      <a href="#" data-page="execution">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+        执行追踪
+      </a>
+      <a href="#" data-page="external">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        外部接入
+      </a>
+      <a href="#" data-page="approval">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        审批中心
+      </a>
+    </nav>
+    <div class="env-tag">Tenant: acme-cn · v0.2.0-demo</div>
+  </aside>
+
+  <div class="main">
+
+    <!-- ==================== Page: Overview ==================== -->
+    <div class="page active" id="page-overview">
+      <div class="page-header">
+        <div><h1>运营总览</h1><div class="subtitle">管理智能体实时状态面板</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="tag tag-ok">● 系统正常</span>
+          <span style="font-size:12px;color:var(--muted)">2026-03-25 10:30</span>
+        </div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="label">已注册智能体</div><div class="value">12</div><div class="trend up">↑ 3 本周新增</div></div>
+        <div class="kpi-card"><div class="label">运行中任务</div><div class="value">7</div><div class="trend">当前活跃</div></div>
+        <div class="kpi-card"><div class="label">待审批</div><div class="value" style="color:var(--warn)">4</div><div class="trend down">↑ 2 较昨日</div></div>
+        <div class="kpi-card"><div class="label">外部 API 调用</div><div class="value">238</div><div class="trend up">今日累计</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header"><h3>最近任务</h3><button class="btn btn-secondary btn-sm" onclick="switchPage('execution')">查看全部 →</button></div>
+          <table>
+            <thead><tr><th>任务</th><th>执行者</th><th>状态</th><th>耗时</th></tr></thead>
+            <tbody>
+              <tr><td>合同条款知识抽取</td><td><span class="avatar">知</span> 知识工程Agent</td><td><span class="tag tag-ok">完成</span></td><td>23min</td></tr>
+              <tr><td>供应商数据治理</td><td><span class="avatar">数</span> 数据治理Agent</td><td><span class="tag tag-warn">运行中</span></td><td>12min</td></tr>
+              <tr><td>风控模型评估</td><td><span class="avatar">风</span> 风控Agent</td><td><span class="tag tag-brand">排队中</span></td><td>—</td></tr>
+              <tr><td>客户画像更新</td><td><span class="avatar">画</span> 画像Agent</td><td><span class="tag tag-danger">失败</span></td><td>8min</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><h3>智能体健康度</h3><button class="btn btn-secondary btn-sm" onclick="switchPage('agents')">管理 →</button></div>
+          <table>
+            <thead><tr><th>智能体</th><th>类型</th><th>状态</th><th>成功率</th></tr></thead>
+            <tbody>
+              <tr><td>🧠 管理智能体</td><td><span class="tag tag-brand">管理</span></td><td><span class="tag tag-ok">在线</span></td><td>—</td></tr>
+              <tr><td>📊 数据治理Agent</td><td><span class="tag tag-ok">子Agent</span></td><td><span class="tag tag-ok">在线</span></td><td>96%</td></tr>
+              <tr><td>📝 知识工程Agent</td><td><span class="tag tag-ok">子Agent</span></td><td><span class="tag tag-ok">在线</span></td><td>91%</td></tr>
+              <tr><td>🔗 OpenAI GPT-4</td><td><span class="tag tag-purple">外部</span></td><td><span class="tag tag-ok">在线</span></td><td>99%</td></tr>
+              <tr><td>🔗 公司知识库API</td><td><span class="tag tag-purple">外部</span></td><td><span class="tag tag-warn">延迟高</span></td><td>87%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Page: Agent Management ==================== -->
+    <div class="page" id="page-agents">
+      <div class="page-header">
+        <div><h1>智能体管理</h1><div class="subtitle">注册、配置和管理所有智能体</div></div>
+        <button class="btn btn-primary" onclick="openModal('modal-new-agent')">+ 注册新智能体</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-secondary btn-sm filter-btn active-filter" data-filter="all">全部 (8)</button>
+        <button class="btn btn-secondary btn-sm filter-btn" data-filter="manager">管理Agent (1)</button>
+        <button class="btn btn-secondary btn-sm filter-btn" data-filter="sub">子Agent (4)</button>
+        <button class="btn btn-secondary btn-sm filter-btn" data-filter="external">外部Agent (3)</button>
+      </div>
+      <div class="agent-grid" id="agent-grid">
+        <div class="agent-card" data-type="manager" data-agent="orchestrator" onclick="openAgentDetail('orchestrator')">
+          <div class="agent-icon" style="background:var(--brand-light);color:var(--brand)">🧠</div>
+          <div class="agent-name">管理智能体（Orchestrator）</div>
+          <div class="agent-desc">核心编排引擎，负责任务分解、子Agent调度、结果汇总和审批流程。所有任务必须经过管理智能体分派。</div>
+          <div class="agent-meta"><span class="tag tag-brand">管理</span><span class="tag tag-ok">在线</span></div>
+        </div>
+        <div class="agent-card" data-type="sub" data-agent="data-gov" onclick="openAgentDetail('data-gov')">
+          <div class="agent-icon" style="background:var(--ok-bg);color:var(--ok)">📊</div>
+          <div class="agent-name">数据治理 Agent</div>
+          <div class="agent-desc">负责数据质量检查、元数据管理、数据血缘分析。支持连接 Hive、MySQL、PostgreSQL 等数据源。</div>
+          <div class="agent-meta"><span class="tag tag-ok">子Agent</span><span class="tag tag-ok">在线</span><span class="tag" style="background:#f3f4f6">3 Skills</span></div>
+        </div>
+        <div class="agent-card" data-type="sub" data-agent="knowledge" onclick="openAgentDetail('knowledge')">
+          <div class="agent-icon" style="background:var(--ok-bg);color:var(--ok)">📝</div>
+          <div class="agent-name">知识工程 Agent</div>
+          <div class="agent-desc">负责知识抽取、知识图谱构建、术语标准化。擅长从非结构化文档中提取结构化知识。</div>
+          <div class="agent-meta"><span class="tag tag-ok">子Agent</span><span class="tag tag-ok">在线</span><span class="tag" style="background:#f3f4f6">5 Skills</span></div>
+        </div>
+        <div class="agent-card" data-type="sub" data-agent="risk" onclick="openAgentDetail('risk')">
+          <div class="agent-icon" style="background:var(--ok-bg);color:var(--ok)">🛡️</div>
+          <div class="agent-name">风控分析 Agent</div>
+          <div class="agent-desc">负责风险评估、合规检查、异常检测。支持规则引擎和 ML 模型两种风控模式。</div>
+          <div class="agent-meta"><span class="tag tag-ok">子Agent</span><span class="tag tag-warn">空闲</span><span class="tag" style="background:#f3f4f6">4 Skills</span></div>
+        </div>
+        <div class="agent-card" data-type="sub" data-agent="profile" onclick="openAgentDetail('profile')">
+          <div class="agent-icon" style="background:var(--ok-bg);color:var(--ok)">👤</div>
+          <div class="agent-name">客户画像 Agent</div>
+          <div class="agent-desc">负责客户标签计算、画像生成、客群分析。支持实时和离线两种画像更新模式。</div>
+          <div class="agent-meta"><span class="tag tag-ok">子Agent</span><span class="tag tag-ok">在线</span><span class="tag" style="background:#f3f4f6">2 Skills</span></div>
+        </div>
+        <div class="agent-card" data-type="external" data-agent="gpt4o" onclick="openAgentDetail('gpt4o')">
+          <div class="agent-icon" style="background:var(--purple-bg);color:var(--purple)">🔗</div>
+          <div class="agent-name">OpenAI GPT-4o</div>
+          <div class="agent-desc">外部 LLM 服务，用于复杂推理、文本生成、代码生成等通用任务。通过 API 接入。</div>
+          <div class="agent-meta"><span class="tag tag-purple">外部API</span><span class="tag tag-ok">在线</span><span class="tag" style="background:#f3f4f6">REST</span></div>
+        </div>
+        <div class="agent-card" data-type="external" data-agent="kb" onclick="openAgentDetail('kb')">
+          <div class="agent-icon" style="background:var(--purple-bg);color:var(--purple)">🔗</div>
+          <div class="agent-name">公司知识库 API</div>
+          <div class="agent-desc">海致内部知识库检索服务，支持语义搜索和精确匹配，返回相关文档片段。</div>
+          <div class="agent-meta"><span class="tag tag-purple">外部API</span><span class="tag tag-warn">延迟高</span><span class="tag" style="background:#f3f4f6">REST</span></div>
+        </div>
+        <div class="agent-card" data-type="external" data-agent="wechat" onclick="openAgentDetail('wechat')">
+          <div class="agent-icon" style="background:var(--purple-bg);color:var(--purple)">🔗</div>
+          <div class="agent-name">企业微信通知</div>
+          <div class="agent-desc">企业微信消息推送服务，用于任务完成通知、审批提醒、异常告警等场景。</div>
+          <div class="agent-meta"><span class="tag tag-purple">外部API</span><span class="tag tag-ok">在线</span><span class="tag" style="background:#f3f4f6">Webhook</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Page: Agent Detail ==================== -->
+    <div class="page" id="page-agent-detail">
+      <div class="breadcrumb">
+        <a onclick="switchPage('agents')">智能体管理</a>
+        <span>/</span>
+        <span id="detail-breadcrumb-name">知识工程 Agent</span>
+      </div>
+      <div class="page-header">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div id="detail-icon" style="width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--ok-bg)">📝</div>
+          <div>
+            <h1 id="detail-name">知识工程 Agent</h1>
+            <div class="subtitle" id="detail-subtitle">子Agent · 在线 · 5 Skills</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="openAgentChat()">💬 对话测试</button>
+          <button class="btn btn-secondary btn-sm">编辑</button>
+          <button class="btn btn-danger btn-sm">停用</button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" id="detail-tabs">
+        <button class="tab active" data-tab="tab-overview" onclick="switchTab(this)">概览</button>
+        <button class="tab" data-tab="tab-instructions" onclick="switchTab(this)">指令配置</button>
+        <button class="tab" data-tab="tab-skills" onclick="switchTab(this)">Skills & 工具</button>
+        <button class="tab" data-tab="tab-history" onclick="switchTab(this)">执行历史</button>
+      </div>
+
+      <!-- Tab: Overview -->
+      <div class="tab-content active" id="tab-overview">
+        <div class="grid-2">
+          <div>
+            <div class="panel">
+              <div class="panel-header"><h3>基本信息</h3></div>
+              <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;font-size:13px">
+                <div style="color:var(--muted)">名称</div><div id="info-name">知识工程 Agent</div>
+                <div style="color:var(--muted)">类型</div><div><span class="tag tag-ok">子Agent</span></div>
+                <div style="color:var(--muted)">状态</div><div><span class="tag tag-ok">在线</span></div>
+                <div style="color:var(--muted)">创建时间</div><div>2026-03-20 14:30</div>
+                <div style="color:var(--muted)">最后活跃</div><div>2026-03-25 10:23</div>
+                <div style="color:var(--muted)">描述</div><div id="info-desc">负责知识抽取、知识图谱构建、术语标准化。擅长从非结构化文档中提取结构化知识。</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><h3>权限配置</h3></div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+                <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--ok)">✓</span> 读取本体数据</div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--ok)">✓</span> 写入本体数据</div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--muted)">✗</span> <span style="color:var(--muted)">调用外部API（需管理Agent中转）</span></div>
+                <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--muted)">✗</span> <span style="color:var(--muted)">发送通知</span></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="panel">
+              <div class="panel-header"><h3>性能指标（近 7 天）</h3></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div>
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">成功率</div>
+                  <div style="font-size:24px;font-weight:700;color:var(--ok)">91%</div>
+                  <div class="stat-bar" style="margin-top:6px"><div class="stat-bar-fill" style="width:91%;background:var(--ok)"></div></div>
+                </div>
+                <div>
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">平均耗时</div>
+                  <div style="font-size:24px;font-weight:700">8.2 min</div>
+                  <div class="stat-bar" style="margin-top:6px"><div class="stat-bar-fill" style="width:55%;background:var(--brand)"></div></div>
+                </div>
+                <div>
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">执行次数</div>
+                  <div style="font-size:24px;font-weight:700">47</div>
+                  <div class="stat-bar" style="margin-top:6px"><div class="stat-bar-fill" style="width:70%;background:var(--brand)"></div></div>
+                </div>
+                <div>
+                  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Token 消耗</div>
+                  <div style="font-size:24px;font-weight:700">186K</div>
+                  <div class="stat-bar" style="margin-top:6px"><div class="stat-bar-fill" style="width:40%;background:var(--warn)"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><h3>关联编排</h3></div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="padding:10px;border:1px solid var(--line);border-radius:8px;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+                  <div><strong>合同条款知识抽取流程</strong><div style="font-size:11px;color:var(--muted)">步骤 1：抽取合同关键条款</div></div>
+                  <span class="tag tag-ok">活跃</span>
+                </div>
+                <div style="padding:10px;border:1px solid var(--line);border-radius:8px;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+                  <div><strong>术语标准化流程</strong><div style="font-size:11px;color:var(--muted)">步骤 2：术语归一化处理</div></div>
+                  <span class="tag tag-warn">草稿</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Instructions -->
+      <div class="tab-content" id="tab-instructions">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>系统指令（System Prompt）</h3>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm" onclick="resetInstructions()">重置默认</button>
+              <button class="btn btn-primary btn-sm" onclick="saveInstructions()">保存</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+            系统指令定义了该智能体的角色、行为边界和输出格式。管理智能体调用该 Agent 时，此指令会作为 System Prompt 注入 LLM。
+          </div>
+          <textarea class="code-editor" id="instructions-editor" rows="12">你是一个专业的知识工程智能体，隶属于 BizAgentOS 平台。
+
+## 角色定义
+你负责从非结构化文档（合同、报告、规章制度等）中抽取结构化知识。
+
+## 能力范围
+1. 关键条款抽取：识别义务条款、违约条款、生效条件
+2. 实体关系提取：识别人名、机构名、金额、日期等实体及其关系
+3. 术语标准化：将不同表述的同义术语归一化
+4. 知识图谱构建：将抽取结果组织为三元组形式
+
+## 输出格式
+始终以 JSON 格式返回结果，包含以下字段：
+- entities: 实体列表
+- relations: 关系列表
+- clauses: 条款列表（如适用）
+- confidence: 每项结果的置信度分数
+
+## 行为约束
+- 不可直接与用户对话，仅响应管理智能体的工具调用
+- 不可访问外部 API，如需外部增强需通过管理智能体中转
+- 对于置信度低于 0.6 的结果，标记为"待人工确认"</textarea>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-header"><h3>工具描述（Tool Descriptions）</h3></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px">告诉 LLM 何时以及如何使用该 Agent 作为工具</div>
+            <textarea class="code-editor" rows="6" style="min-height:100px">当任务涉及以下场景时调用知识工程Agent：
+- 需要从文档中提取结构化信息
+- 需要识别和标准化专业术语
+- 需要构建知识图谱或实体关系网络
+
+输入：待处理的文档内容或文档引用
+输出：JSON 格式的结构化知识</textarea>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>变量描述（Variable Descriptions）</h3></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px">运行时可注入的上下文变量</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="padding:10px;border:1px solid var(--line);border-radius:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">{{document_content}}</code>
+                  <span class="tag" style="background:#f3f4f6;font-size:11px">String</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">待处理的文档原文内容</div>
+              </div>
+              <div style="padding:10px;border:1px solid var(--line);border-radius:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">{{extraction_type}}</code>
+                  <span class="tag" style="background:#f3f4f6;font-size:11px">Enum</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">抽取类型：clause | entity | terminology</div>
+              </div>
+              <div style="padding:10px;border:1px solid var(--line);border-radius:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <code style="font-size:12px;background:#f3f4f6;padding:2px 6px;border-radius:4px">{{output_language}}</code>
+                  <span class="tag" style="background:#f3f4f6;font-size:11px">String</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:4px">输出语言，默认 zh-CN</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="align-self:flex-start">+ 添加变量</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Skills -->
+      <div class="tab-content" id="tab-skills">
+        <div class="panel">
+          <div class="panel-header"><h3>已关联 Skills</h3><button class="btn btn-secondary btn-sm">+ 关联 Skill</button></div>
+          <table>
+            <thead><tr><th>Skill 名称</th><th>描述</th><th>状态</th><th>调用次数</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><strong>关键条款抽取</strong></td><td style="color:var(--muted)">从合同文档中识别义务、违约、生效条件等条款</td><td><span class="tag tag-ok">启用</span></td><td>23</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+              <tr><td><strong>实体关系提取</strong></td><td style="color:var(--muted)">识别文档中的命名实体及其关系</td><td><span class="tag tag-ok">启用</span></td><td>18</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+              <tr><td><strong>术语标准化</strong></td><td style="color:var(--muted)">将同义不同表述的术语归一化</td><td><span class="tag tag-ok">启用</span></td><td>15</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+              <tr><td><strong>知识图谱构建</strong></td><td style="color:var(--muted)">将抽取结果组织为知识图谱三元组</td><td><span class="tag tag-ok">启用</span></td><td>12</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+              <tr><td><strong>文档摘要生成</strong></td><td style="color:var(--muted)">生成文档的结构化摘要</td><td><span class="tag tag-warn">测试中</span></td><td>3</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab: History -->
+      <div class="tab-content" id="tab-history">
+        <div class="panel">
+          <div class="panel-header"><h3>最近执行记录</h3></div>
+          <table>
+            <thead><tr><th>任务 ID</th><th>任务名称</th><th>编排</th><th>状态</th><th>耗时</th><th>Token</th><th>时间</th></tr></thead>
+            <tbody>
+              <tr><td style="font-family:monospace;font-size:12px">T-1024</td><td>合同条款知识抽取</td><td>合同条款流程</td><td><span class="tag tag-ok">完成</span></td><td>8min</td><td>3,200</td><td>10:15</td></tr>
+              <tr><td style="font-family:monospace;font-size:12px">T-1020</td><td>供应商合同分析</td><td>合同条款流程</td><td><span class="tag tag-ok">完成</span></td><td>12min</td><td>4,800</td><td>09:30</td></tr>
+              <tr><td style="font-family:monospace;font-size:12px">T-1018</td><td>术语包沉淀</td><td>术语标准化流程</td><td><span class="tag tag-ok">完成</span></td><td>5min</td><td>1,600</td><td>昨日</td></tr>
+              <tr><td style="font-family:monospace;font-size:12px">T-1015</td><td>法规条款抽取</td><td>合同条款流程</td><td><span class="tag tag-danger">失败</span></td><td>3min</td><td>800</td><td>昨日</td></tr>
+              <tr><td style="font-family:monospace;font-size:12px">T-1012</td><td>知识图谱更新</td><td>知识图谱流程</td><td><span class="tag tag-ok">完成</span></td><td>15min</td><td>6,200</td><td>3/23</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Page: Orchestration ==================== -->
+    <div class="page" id="page-orchestration">
+      <div class="page-header">
+        <div><h1>流程编排</h1><div class="subtitle">管理智能体定义任务调用链 · Agent as Tool 模式</div></div>
+        <button class="btn btn-primary" onclick="openModal('modal-new-flow')">+ 新建编排</button>
+      </div>
+      <div class="panel" style="margin-bottom:16px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);border-color:#c7d2fe">
+        <div style="display:flex;gap:16px;align-items:flex-start">
+          <div style="font-size:28px">💡</div>
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">编排原则：管理智能体是唯一的调度中心</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">
+              所有子智能体被包装为"工具"（Agent as Tool），由管理智能体统一调用。子智能体之间<strong>不能直接互调</strong>，
+              第三方 API 也只能通过管理智能体的"外部调用工具"来访问。这确保了成本可控、流程可审计、结果可追溯。
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="panel">
+            <div class="panel-header"><h3>编排列表</h3></div>
+            <div class="flow-list">
+              <div class="flow-list-item" style="padding:12px;border:2px solid var(--brand);border-radius:10px;margin-bottom:10px;cursor:pointer;background:var(--brand-light)">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div><div style="font-weight:600">合同条款知识抽取流程</div><div style="font-size:12px;color:var(--muted);margin-top:2px">管理Agent → 知识工程Agent → GPT-4o → 管理Agent审核</div></div>
+                  <span class="tag tag-ok">活跃</span>
+                </div>
+              </div>
+              <div class="flow-list-item" style="padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;cursor:pointer">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div><div style="font-weight:600">供应商数据治理巡检</div><div style="font-size:12px;color:var(--muted);margin-top:2px">管理Agent → 数据治理Agent → 风控Agent → 通知</div></div>
+                  <span class="tag tag-ok">活跃</span>
+                </div>
+              </div>
+              <div class="flow-list-item" style="padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;cursor:pointer">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div><div style="font-weight:600">客户画像自动更新</div><div style="font-size:12px;color:var(--muted);margin-top:2px">管理Agent → 数据治理Agent → 画像Agent → 通知</div></div>
+                  <span class="tag tag-warn">草稿</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="panel">
+            <div class="panel-header">
+              <h3>编排详情：合同条款知识抽取流程</h3>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-secondary btn-sm">编辑</button>
+                <button class="btn btn-primary btn-sm">执行</button>
+              </div>
+            </div>
+            <div class="flow-canvas" id="flow-detail-canvas">
+              <svg class="flow-svg" id="flow-svg"></svg>
+              <div class="flow-node manager" id="fn-start" style="left:50%;top:12px;transform:translateX(-50%)">
+                <div class="node-type">管理智能体 · 调度中心</div>
+                <div class="node-name">🧠 管理智能体</div>
+                <div class="node-desc">接收任务 → 分解 → 调度 → 汇总</div>
+              </div>
+              <div class="flow-step-num" style="left:50%;top:88px;transform:translateX(-50%);z-index:3">1</div>
+              <div class="flow-node sub" id="fn-ke" style="left:16px;top:114px">
+                <div class="node-type">子Agent · 工具调用</div>
+                <div class="node-name">📝 知识工程Agent</div>
+                <div class="node-desc">抽取合同关键条款</div>
+              </div>
+              <div class="flow-step-num" style="left:50%;top:194px;transform:translateX(-50%);z-index:3">2</div>
+              <div class="flow-node external" id="fn-gpt" style="right:16px;top:218px">
+                <div class="node-type">外部API · 受控调用</div>
+                <div class="node-name">🔗 GPT-4o</div>
+                <div class="node-desc">深度语义分析与补全</div>
+              </div>
+              <div class="flow-step-num" style="left:50%;top:300px;transform:translateX(-50%);z-index:3">3</div>
+              <div class="flow-node manager" id="fn-end" style="left:50%;top:324px;transform:translateX(-50%)">
+                <div class="node-type">管理智能体 · 审核汇总</div>
+                <div class="node-name">🧠 结果审核 & 输出</div>
+                <div class="node-desc">校验结果 → 人工审批 → 输出报告</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Page: Execution ==================== -->
+    <div class="page" id="page-execution">
+      <div class="page-header">
+        <div><h1>执行追踪</h1><div class="subtitle">实时监控任务执行状态和调用链路</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm">刷新</button>
+          <button class="btn btn-secondary btn-sm">导出日志</button>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="panel">
+            <div class="panel-header"><h3>任务列表</h3></div>
+            <table>
+              <thead><tr><th>ID</th><th>任务名称</th><th>编排</th><th>状态</th><th>发起时间</th></tr></thead>
+              <tbody>
+                <tr class="exec-row" style="cursor:pointer" onclick="selectTask(this)"><td style="font-family:monospace;font-size:12px">T-1024</td><td>合同条款知识抽取</td><td style="font-size:12px">合同条款流程</td><td><span class="tag tag-warn">运行中</span></td><td style="font-size:12px">10:15</td></tr>
+                <tr class="exec-row" style="cursor:pointer" onclick="selectTask(this)"><td style="font-family:monospace;font-size:12px">T-1023</td><td>供应商数据巡检</td><td style="font-size:12px">数据治理流程</td><td><span class="tag tag-ok">完成</span></td><td style="font-size:12px">09:42</td></tr>
+                <tr class="exec-row" style="cursor:pointer" onclick="selectTask(this)"><td style="font-family:monospace;font-size:12px">T-1022</td><td>风控模型评估</td><td style="font-size:12px">风控流程</td><td><span class="tag tag-danger">失败</span></td><td style="font-size:12px">09:10</td></tr>
+                <tr class="exec-row" style="cursor:pointer" onclick="selectTask(this)"><td style="font-family:monospace;font-size:12px">T-1021</td><td>客户画像更新</td><td style="font-size:12px">画像流程</td><td><span class="tag tag-ok">完成</span></td><td style="font-size:12px">08:30</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="panel">
+            <div class="panel-header"><h3>T-1024 · 执行链路</h3><span class="tag tag-warn">运行中 · 12min</span></div>
+            <div class="timeline">
+              <div class="timeline-item done"><div class="tl-time">10:15:00</div><div class="tl-title">🧠 管理智能体 · 任务接收</div><div class="tl-detail">解析任务意图，确定使用「合同条款知识抽取流程」</div></div>
+              <div class="timeline-item done"><div class="tl-time">10:15:03</div><div class="tl-title">🧠 管理智能体 · 任务分解</div><div class="tl-detail">分解为 3 个子步骤：条款抽取 → 语义补全 → 结果审核</div></div>
+              <div class="timeline-item done"><div class="tl-time">10:15:05</div><div class="tl-title">📝 知识工程Agent · 工具调用</div><div class="tl-detail">调用知识工程Agent抽取合同中的关键义务、违约条款。耗时 8min，返回 23 条结构化条款。</div></div>
+              <div class="timeline-item running"><div class="tl-time">10:23:12</div><div class="tl-title">🔗 GPT-4o · 外部API调用</div><div class="tl-detail">管理智能体调用 GPT-4o 进行深度语义分析，补全遗漏条款...</div></div>
+              <div class="timeline-item"><div class="tl-time">待执行</div><div class="tl-title">🧠 管理智能体 · 结果审核</div><div class="tl-detail">等待上一步完成后，汇总结果并提交人工审批</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3>调用成本</h3></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
+              <div><div style="font-size:11px;color:var(--muted)">LLM Token</div><div style="font-size:18px;font-weight:700">12,450</div></div>
+              <div><div style="font-size:11px;color:var(--muted)">外部API调用</div><div style="font-size:18px;font-weight:700">2 次</div></div>
+              <div><div style="font-size:11px;color:var(--muted)">预估费用</div><div style="font-size:18px;font-weight:700;color:var(--brand)">¥0.38</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Page: External ==================== -->
+    <div class="page" id="page-external">
+      <div class="page-header">
+        <div><h1>外部接入管理</h1><div class="subtitle">统一管理第三方智能体和 API 接入 · 仅管理智能体可调用</div></div>
+        <button class="btn btn-primary" onclick="openModal('modal-new-external')">+ 接入新服务</button>
+      </div>
+      <div class="panel" style="margin-bottom:16px;background:linear-gradient(135deg,#fef3c7,#fef9c3);border-color:#fcd34d">
+        <div style="display:flex;gap:16px;align-items:flex-start">
+          <div style="font-size:28px">🔒</div>
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">安全策略：外部调用集中管控</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6">
+              所有外部 API 调用必须通过管理智能体的"外部调用工具"进行。子智能体<strong>无权直接调用</strong>任何第三方服务。
+              这避免了"随意外挂一个智能体就能调第三方"的成本失控问题。每次外部调用都有审计日志。
+            </div>
+          </div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>服务名称</th><th>类型</th><th>端点</th><th>认证方式</th><th>状态</th><th>调用限额</th><th>今日已用</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td><strong>🔗 OpenAI GPT-4o</strong></td><td><span class="tag tag-purple">LLM</span></td><td style="font-family:monospace;font-size:12px">api.openai.com/v1/chat</td><td>API Key</td><td><span class="tag tag-ok">在线</span></td><td>1000次/日</td><td>156</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+          <tr><td><strong>🔗 公司知识库</strong></td><td><span class="tag tag-brand">检索</span></td><td style="font-family:monospace;font-size:12px">kb.haizhi.com/api/search</td><td>OAuth 2.0</td><td><span class="tag tag-warn">延迟高</span></td><td>5000次/日</td><td>82</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+          <tr><td><strong>🔗 企业微信通知</strong></td><td><span class="tag" style="background:#f3f4f6">通知</span></td><td style="font-family:monospace;font-size:12px">qyapi.weixin.qq.com/cgi-bin</td><td>Webhook Token</td><td><span class="tag tag-ok">在线</span></td><td>无限制</td><td>23</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+          <tr><td><strong>🔗 数据中台 API</strong></td><td><span class="tag" style="background:#f3f4f6">数据</span></td><td style="font-family:monospace;font-size:12px">data.haizhi.com/api/v2</td><td>mTLS + Token</td><td><span class="tag tag-danger">离线</span></td><td>10000次/日</td><td>0</td><td><button class="btn btn-secondary btn-sm">配置</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ==================== Page: Approval ==================== -->
+    <div class="page" id="page-approval">
+      <div class="page-header">
+        <div><h1>审批中心</h1><div class="subtitle">管理智能体提交的审批请求</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm active-filter">待审批 (4)</button>
+          <button class="btn btn-secondary btn-sm">已审批</button>
+          <button class="btn btn-secondary btn-sm">已驳回</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="panel" style="border-left:4px solid var(--warn)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tag tag-warn">待审批</span><span style="font-weight:600">合同条款知识抽取 · 结果确认</span></div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:600px">知识工程Agent 已完成合同条款抽取，共提取 23 条结构化条款（义务 8 条、违约 6 条、生效条件 9 条）。GPT-4o 补充了 3 条遗漏条款。请确认结果是否可以输出为最终报告。</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:8px">📎 附件：<a href="#" style="color:var(--brand)">条款抽取结果.json</a> · <a href="#" style="color:var(--brand)">原始合同.pdf</a></div>
+            </div>
+            <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm">✓ 通过</button><button class="btn btn-danger btn-sm">✗ 驳回</button></div>
+          </div>
+        </div>
+        <div class="panel" style="border-left:4px solid var(--warn)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tag tag-warn">待审批</span><span style="font-weight:600">外部API接入申请 · 新增百度文心一言</span></div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:600px">管理智能体检测到当前 GPT-4o 调用量接近限额，建议接入百度文心一言作为备选 LLM。预估月增成本 ¥2,000。</div>
+            </div>
+            <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm">✓ 通过</button><button class="btn btn-danger btn-sm">✗ 驳回</button></div>
+          </div>
+        </div>
+        <div class="panel" style="border-left:4px solid var(--warn)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tag tag-warn">待审批</span><span style="font-weight:600">新 Skill 注册 · 数据血缘分析</span></div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:600px">数据治理Agent 在执行过程中发现缺少"数据血缘分析"能力，已自动生成 Skill 草案。请审批是否允许注册该 Skill。</div>
+            </div>
+            <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm">✓ 通过</button><button class="btn btn-danger btn-sm">✗ 驳回</button></div>
+          </div>
+        </div>
+        <div class="panel" style="border-left:4px solid var(--warn)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="tag tag-warn">待审批</span><span style="font-weight:600">高风险操作 · 批量删除过期数据</span></div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:600px">数据治理Agent 检测到 1,247 条过期数据记录，建议执行批量清理。此操作不可逆，需要人工确认。</div>
+            </div>
+            <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm">✓ 通过</button><button class="btn btn-danger btn-sm">✗ 驳回</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== Modal: New Agent ==================== -->
+<div class="modal-overlay" id="modal-new-agent">
+  <div class="modal modal-lg">
+    <h2>注册新智能体</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>智能体名称</label><input type="text" placeholder="如：报表生成 Agent" /></div>
+      <div class="form-group"><label>类型</label><select><option>子Agent（内部）</option><option>外部API Agent</option></select></div>
+      <div class="form-group full"><label>描述</label><textarea rows="2" placeholder="描述该智能体的职责和能力范围..."></textarea></div>
+      <div class="form-group full">
+        <label>系统指令（System Prompt）</label>
+        <textarea class="code-editor" rows="6" style="min-height:120px" placeholder="你是一个专业的...&#10;&#10;## 角色定义&#10;...&#10;&#10;## 输出格式&#10;...&#10;&#10;## 行为约束&#10;- 不可直接与用户对话&#10;- 不可访问外部 API"></textarea>
+      </div>
+      <div class="form-group">
+        <label>关联 Skills</label>
+        <select multiple style="height:80px"><option>数据质量检查</option><option>知识抽取</option><option>文本生成</option><option>数据血缘分析</option><option>异常检测</option></select>
+      </div>
+      <div class="form-group">
+        <label>工具权限</label>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" checked /> 读取本体数据</label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" checked /> 写入本体数据</label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" /> 调用外部API（需管理Agent中转）</label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;color:var(--text)"><input type="checkbox" /> 发送通知</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-agent')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-new-agent')">注册</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Modal: New Flow ==================== -->
+<div class="modal-overlay" id="modal-new-flow">
+  <div class="modal modal-lg">
+    <h2>新建编排流程</h2>
+    <div class="form-grid">
+      <div class="form-group full"><label>流程名称</label><input type="text" placeholder="如：供应商数据治理巡检" /></div>
+      <div class="form-group full"><label>流程描述</label><textarea rows="2" placeholder="描述该流程的目标和触发条件..."></textarea></div>
+      <div class="form-group full">
+        <label>编排步骤（管理智能体自动作为起点和终点）</label>
+        <div id="flow-steps" style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#f9fafb;border:1px solid var(--line);border-radius:8px">
+            <span style="font-weight:600;color:var(--brand);font-size:12px;width:60px">起点</span>
+            <span>🧠 管理智能体 · 接收任务并分解</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
+            <span style="font-weight:600;color:var(--muted);font-size:12px;width:60px">步骤 1</span>
+            <select style="flex:1"><option>📊 数据治理Agent</option><option>📝 知识工程Agent</option><option>🛡️ 风控分析Agent</option><option>👤 客户画像Agent</option><option>🔗 GPT-4o（外部）</option><option>🔗 公司知识库（外部）</option></select>
+            <input style="flex:1" placeholder="任务说明" value="执行数据质量检查" />
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px">
+            <span style="font-weight:600;color:var(--muted);font-size:12px;width:60px">步骤 2</span>
+            <select style="flex:1"><option>🛡️ 风控分析Agent</option><option>📊 数据治理Agent</option><option>📝 知识工程Agent</option><option>👤 客户画像Agent</option><option>🔗 GPT-4o（外部）</option></select>
+            <input style="flex:1" placeholder="任务说明" value="评估数据风险" />
+          </div>
+          <button class="btn btn-secondary btn-sm" style="align-self:flex-start" onclick="addFlowStep()">+ 添加步骤</button>
+          <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#f9fafb;border:1px solid var(--line);border-radius:8px">
+            <span style="font-weight:600;color:var(--brand);font-size:12px;width:60px">终点</span>
+            <span>🧠 管理智能体 · 汇总结果并审核</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group"><label>触发方式</label><select><option>手动触发</option><option>定时触发（Cron）</option><option>事件触发（Webhook）</option></select></div>
+      <div class="form-group"><label>审批要求</label><select><option>结果需人工审批</option><option>自动通过（低风险）</option><option>每步都需审批</option></select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-flow')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-new-flow')">创建编排</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Modal: New External ==================== -->
+<div class="modal-overlay" id="modal-new-external">
+  <div class="modal">
+    <h2>接入新外部服务</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>服务名称</label><input type="text" placeholder="如：百度文心一言" /></div>
+      <div class="form-group"><label>服务类型</label><select><option>LLM 服务</option><option>检索服务</option><option>通知服务</option><option>数据服务</option><option>其他</option></select></div>
+      <div class="form-group full"><label>API 端点</label><input type="text" placeholder="https://api.example.com/v1/..." /></div>
+      <div class="form-group"><label>认证方式</label><select><option>API Key</option><option>OAuth 2.0</option><option>Webhook Token</option><option>mTLS + Token</option></select></div>
+      <div class="form-group"><label>日调用限额</label><input type="number" placeholder="1000" /></div>
+      <div class="form-group full"><label>描述</label><textarea rows="2" placeholder="描述该服务的用途..."></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('modal-new-external')">取消</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-new-external')">提交审批</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Modal: Chat Test ==================== -->
+<div class="modal-overlay" id="modal-chat">
+  <div class="modal modal-lg">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <h2 style="margin-bottom:2px" id="chat-title">💬 对话测试 · 知识工程 Agent</h2>
+        <div style="font-size:12px;color:var(--muted)">模拟管理智能体调用该 Agent 的交互过程</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('modal-chat')">关闭</button>
+    </div>
+    <div class="chat-box">
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg agent">
+          <div class="msg-role">🧠 管理智能体 → 📝 知识工程Agent</div>
+          系统已就绪。你可以模拟管理智能体向该 Agent 发送工具调用请求。
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="输入任务指令，如：请从以下合同中抽取关键条款..." onkeydown="if(event.key==='Enter')sendChat()" />
+        <button class="btn btn-primary" onclick="sendChat()">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---- Page switching ---- */
+function switchPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById('page-' + pageId);
+  if (el) el.classList.add('active');
+  document.querySelectorAll('.sidebar nav a').forEach(a => {
+    a.classList.toggle('active', a.dataset.page === pageId);
+  });
+  if (pageId === 'orchestration') setTimeout(drawFlowLines, 50);
+}
+document.querySelectorAll('.sidebar nav a').forEach(a => {
+  a.addEventListener('click', e => { e.preventDefault(); switchPage(a.dataset.page); });
+});
+
+/* ---- Modal ---- */
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('show'); });
+});
+
+/* ---- Filter ---- */
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active-filter'));
+    btn.classList.add('active-filter');
+    const f = btn.dataset.filter;
+    document.querySelectorAll('.agent-card').forEach(c => { c.style.display = (f === 'all' || c.dataset.type === f) ? '' : 'none'; });
+  });
+});
+
+/* ---- Flow steps ---- */
+let stepCount = 2;
+function addFlowStep() {
+  stepCount++;
+  const container = document.getElementById('flow-steps');
+  const addBtn = container.querySelector('.btn-secondary');
+  const step = document.createElement('div');
+  step.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px';
+  step.innerHTML = `<span style="font-weight:600;color:var(--muted);font-size:12px;width:60px">步骤 ${stepCount}</span>
+    <select style="flex:1"><option>📊 数据治理Agent</option><option>📝 知识工程Agent</option><option>🛡️ 风控分析Agent</option><option>👤 客户画像Agent</option><option>🔗 GPT-4o（外部）</option><option>🔗 公司知识库（外部）</option></select>
+    <input style="flex:1" placeholder="任务说明" />`;
+  container.insertBefore(step, addBtn);
+}
+
+/* ---- Task select ---- */
+function selectTask(row) {
+  document.querySelectorAll('.exec-row').forEach(r => r.style.background = '');
+  row.style.background = 'var(--brand-light)';
+}
+
+/* ---- Tabs ---- */
+function switchTab(tabEl) {
+  const parent = tabEl.closest('.page');
+  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  parent.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  tabEl.classList.add('active');
+  document.getElementById(tabEl.dataset.tab).classList.add('active');
+}
+
+/* ---- Agent Detail ---- */
+const agentData = {
+  'orchestrator': { icon:'🧠', name:'管理智能体（Orchestrator）', type:'管理', bg:'var(--brand-light)', desc:'核心编排引擎，负责任务分解、子Agent调度、结果汇总和审批流程。' },
+  'data-gov': { icon:'📊', name:'数据治理 Agent', type:'子Agent', bg:'var(--ok-bg)', desc:'负责数据质量检查、元数据管理、数据血缘分析。' },
+  'knowledge': { icon:'📝', name:'知识工程 Agent', type:'子Agent', bg:'var(--ok-bg)', desc:'负责知识抽取、知识图谱构建、术语标准化。' },
+  'risk': { icon:'🛡️', name:'风控分析 Agent', type:'子Agent', bg:'var(--ok-bg)', desc:'负责风险评估、合规检查、异常检测。' },
+  'profile': { icon:'👤', name:'客户画像 Agent', type:'子Agent', bg:'var(--ok-bg)', desc:'负责客户标签计算、画像生成、客群分析。' },
+  'gpt4o': { icon:'🔗', name:'OpenAI GPT-4o', type:'外部API', bg:'var(--purple-bg)', desc:'外部 LLM 服务，用于复杂推理、文本生成、代码生成。' },
+  'kb': { icon:'🔗', name:'公司知识库 API', type:'外部API', bg:'var(--purple-bg)', desc:'海致内部知识库检索服务。' },
+  'wechat': { icon:'🔗', name:'企业微信通知', type:'外部API', bg:'var(--purple-bg)', desc:'企业微信消息推送服务。' },
+};
+function openAgentDetail(agentId) {
+  const d = agentData[agentId];
+  if (!d) return;
+  document.getElementById('detail-icon').textContent = d.icon;
+  document.getElementById('detail-icon').style.background = d.bg;
+  document.getElementById('detail-name').textContent = d.name;
+  document.getElementById('detail-breadcrumb-name').textContent = d.name;
+  document.getElementById('detail-subtitle').textContent = d.type + ' · 在线';
+  document.getElementById('info-name').textContent = d.name;
+  document.getElementById('info-desc').textContent = d.desc;
+  document.querySelectorAll('#page-agent-detail .tab').forEach((t,i) => t.classList.toggle('active', i===0));
+  document.querySelectorAll('#page-agent-detail .tab-content').forEach((c,i) => c.classList.toggle('active', i===0));
+  switchPage('agent-detail');
+}
+
+/* ---- Chat ---- */
+function openAgentChat() {
+  const name = document.getElementById('detail-name').textContent;
+  document.getElementById('chat-title').textContent = '💬 对话测试 · ' + name;
+  openModal('modal-chat');
+}
+const mockResponses = [
+  { delay: 800, text: '收到任务指令。正在解析文档内容...' },
+  { delay: 2200, text: '已完成文档解析。识别到以下结构：\n\n📋 文档类型：采购合同\n📄 总页数：12 页\n🏢 甲方：海致科技有限公司\n🏢 乙方：XX供应商\n\n正在执行关键条款抽取...' },
+  { delay: 3500, text: '抽取完成。结果如下：\n\n```json\n{\n  "clauses": [\n    {"type":"义务","content":"乙方应在签约后30日内交付全部设备","confidence":0.95},\n    {"type":"违约","content":"逾期交付每日按合同总额0.5%支付违约金","confidence":0.92},\n    {"type":"生效条件","content":"本合同自双方签字盖章之日起生效","confidence":0.98}\n  ],\n  "entity_count": 15,\n  "relation_count": 8\n}\n```\n\n共抽取 3 条关键条款，置信度均高于 0.9。建议提交管理智能体审核。' }
+];
+let chatStep = 0;
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML += `<div class="chat-msg user"><div class="msg-role">👤 你（模拟管理智能体）</div>${escHtml(text)}</div>`;
+  msgs.innerHTML += `<div class="chat-typing" id="typing-indicator"><span class="dot">●</span> <span class="dot">●</span> <span class="dot">●</span> Agent 思考中...</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  const resp = mockResponses[chatStep % mockResponses.length];
+  chatStep++;
+  setTimeout(() => {
+    const typing = document.getElementById('typing-indicator');
+    if (typing) typing.remove();
+    const icon = document.getElementById('detail-icon') ? document.getElementById('detail-icon').textContent : '📝';
+    msgs.innerHTML += `<div class="chat-msg agent"><div class="msg-role">${icon} Agent 响应</div>${escHtml(resp.text).replace(/\n/g,'<br>').replace(/```json([\s\S]*?)```/g,'<pre style="background:#1e1e2e;color:#cdd6f4;padding:10px;border-radius:6px;font-size:12px;margin:6px 0;overflow-x:auto">$1</pre>')}</div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  }, resp.delay);
+}
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ---- Instructions ---- */
+function saveInstructions() { alert('指令已保存'); }
+function resetInstructions() { if(confirm('确定要重置为默认指令吗？')) document.getElementById('instructions-editor').value = '你是一个专业的知识工程智能体...'; }
+
+/* ---- SVG Flow Lines ---- */
+function drawFlowLines() {
+  const canvas = document.getElementById('flow-detail-canvas');
+  const svg = document.getElementById('flow-svg');
+  if (!canvas || !svg) return;
+  const cr = canvas.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${cr.width} ${cr.height}`);
+  svg.style.width = cr.width + 'px';
+  svg.style.height = cr.height + 'px';
+
+  const nodes = [
+    document.getElementById('fn-start'),
+    document.getElementById('fn-ke'),
+    document.getElementById('fn-gpt'),
+    document.getElementById('fn-end')
+  ];
+  if (nodes.some(n => !n)) return;
+
+  const rects = nodes.map(n => {
+    const r = n.getBoundingClientRect();
+    return { cx: r.left - cr.left + r.width/2, top: r.top - cr.top, bottom: r.top - cr.top + r.height, left: r.left - cr.left, right: r.left - cr.left + r.width };
+  });
+
+  let paths = '';
+  const color = '#2563eb';
+  const colorOk = '#059669';
+  const colorPurple = '#7c3aed';
+
+  function arrow(x1,y1,x2,y2,c) {
+    const dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
+    const ux=dx/len, uy=dy/len;
+    const ax=x2-ux*8, ay=y2-uy*8;
+    return `<line x1="${x1}" y1="${y1}" x2="${ax}" y2="${ay}" stroke="${c}" stroke-width="2" stroke-dasharray="${c===colorPurple?'6,4':'none'}"/>
+      <polygon points="${x2},${y2} ${ax-uy*5},${ay+ux*5} ${ax+uy*5},${ay-ux*5}" fill="${c}"/>`;
+  }
+
+  paths += arrow(rects[0].cx, rects[0].bottom, rects[1].cx + rects[1].right/2 - rects[1].left/2, rects[1].top, colorOk);
+  paths += arrow(rects[1].right, rects[1].bottom - 10, rects[2].left, rects[2].top + 10, colorPurple);
+  paths += arrow(rects[2].cx - (rects[2].right - rects[2].left)/2 + 40, rects[2].bottom, rects[3].cx, rects[3].top, color);
+
+  svg.innerHTML = paths;
+}
+
+window.addEventListener('resize', () => { if(document.getElementById('page-orchestration').classList.contains('active')) drawFlowLines(); });
+</script>
+</body>
+</html>
