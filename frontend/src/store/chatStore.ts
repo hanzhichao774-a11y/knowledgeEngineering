@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { ChatMessage } from '../types';
 
 interface ChatState {
@@ -8,13 +9,23 @@ interface ChatState {
   clearMessages: () => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: [],
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messages: [],
 
-  addMessage: (msg) =>
-    set((state) => ({ messages: [...state.messages, msg] })),
+      addMessage: (msg) =>
+        set((state) => ({ messages: [...state.messages, msg] })),
 
-  setMessages: (msgs) => set({ messages: msgs }),
+      setMessages: (msgs) => set({ messages: msgs }),
 
-  clearMessages: () => set({ messages: [] }),
-}));
+      clearMessages: () => set({ messages: [] }),
+    }),
+    {
+      name: 'ke-chat-store',
+      partialize: (state) => ({
+        messages: state.messages,
+      }),
+    },
+  ),
+);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Task, CostInfo, Step } from '../types';
 
 interface TaskState {
@@ -11,54 +12,68 @@ interface TaskState {
   updateCost: (taskId: string, cost: CostInfo) => void;
   updateTaskStatus: (taskId: string, status: Task['status']) => void;
   getActiveTask: () => Task | undefined;
+  clearAll: () => void;
 }
 
-export const useTaskStore = create<TaskState>((set, get) => ({
-  tasks: [],
-  activeTaskId: null,
+export const useTaskStore = create<TaskState>()(
+  persist(
+    (set, get) => ({
+      tasks: [],
+      activeTaskId: null,
 
-  setActiveTask: (id) => set({ activeTaskId: id }),
+      setActiveTask: (id) => set({ activeTaskId: id }),
 
-  addTask: (task) =>
-    set((state) => ({ tasks: [...state.tasks, task] })),
+      addTask: (task) =>
+        set((state) => ({ tasks: [...state.tasks, task] })),
 
-  updateStep: (taskId, stepIndex, updates) =>
-    set((state) => ({
-      tasks: state.tasks.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              steps: t.steps.map((s, i) =>
-                i === stepIndex ? { ...s, ...updates } : s
-              ),
-            }
-          : t
-      ),
-    })),
+      updateStep: (taskId, stepIndex, updates) =>
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId
+              ? {
+                  ...t,
+                  steps: t.steps.map((s, i) =>
+                    i === stepIndex ? { ...s, ...updates } : s
+                  ),
+                }
+              : t
+          ),
+        })),
 
-  replaceSteps: (taskId, steps) =>
-    set((state) => ({
-      tasks: state.tasks.map((t) =>
-        t.id === taskId ? { ...t, steps } : t
-      ),
-    })),
+      replaceSteps: (taskId, steps) =>
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId ? { ...t, steps } : t
+          ),
+        })),
 
-  updateCost: (taskId, cost) =>
-    set((state) => ({
-      tasks: state.tasks.map((t) =>
-        t.id === taskId ? { ...t, cost } : t
-      ),
-    })),
+      updateCost: (taskId, cost) =>
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId ? { ...t, cost } : t
+          ),
+        })),
 
-  updateTaskStatus: (taskId, status) =>
-    set((state) => ({
-      tasks: state.tasks.map((t) =>
-        t.id === taskId ? { ...t, status } : t
-      ),
-    })),
+      updateTaskStatus: (taskId, status) =>
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.id === taskId ? { ...t, status } : t
+          ),
+        })),
 
-  getActiveTask: () => {
-    const { tasks, activeTaskId } = get();
-    return tasks.find((t) => t.id === activeTaskId);
-  },
-}));
+      getActiveTask: () => {
+        const { tasks, activeTaskId } = get();
+        return tasks.find((t) => t.id === activeTaskId);
+      },
+
+      clearAll: () => set({ tasks: [], activeTaskId: null }),
+    }),
+    {
+      name: 'ke-task-store',
+      partialize: (state) => ({
+        tasks: state.tasks,
+        activeTaskId: state.activeTaskId,
+      }),
+    },
+  ),
+);
