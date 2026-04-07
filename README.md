@@ -43,6 +43,8 @@
 | 后端框架 | Fastify + TypeScript | 高性能 Node.js 服务 |
 | 实时通信 | @fastify/websocket | 双向 WebSocket |
 | 文件上传 | @fastify/multipart | 50MB 限制 |
+| 文档解析 | Docling (Docker) | IBM 开源 TableFormer，表格精度 97.9% |
+| 多格式支持 | exceljs / mammoth | Excel 原生解析 + Word 转 Markdown |
 | Agent 底座 | KodaX | 独立仓库引用 |
 | LLM | MiniMax（主）/ 千问（备） | 已采购 |
 | 图数据库 | Neo4j | Bolt 协议连接 |
@@ -85,6 +87,9 @@ knowledgeEngineeringDemo/
 
 - Node.js >= 18.0.0
 - npm
+- Docker Desktop（用于 Docling 文档解析服务）
+- Neo4j（`brew install neo4j` 或 Docker）
+- GraphicsMagick + Ghostscript（`brew install graphicsmagick ghostscript`，PDF 转图片需要）
 
 ### 1. 克隆项目
 
@@ -109,7 +114,28 @@ cd frontend && npm install
 cd ../backend && npm install
 ```
 
-### 4. 启动开发服务器
+### 4. 启动 Docling 文档解析服务（Docker）
+
+Docling 是 IBM 开源的文档解析引擎，使用 TableFormer 深度学习模型识别表格结构（精度 97.9%）。通过 Docker 容器本地部署：
+
+```bash
+# 首次启动（会自动拉取镜像，约 2-3GB）
+docker run -d --name docling-serve -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest
+
+# 验证服务是否就绪
+curl http://localhost:5001/health
+# 应返回: {"status":"ok"}
+```
+
+后续启动只需：
+
+```bash
+docker start docling-serve
+```
+
+> **注意**：如果 Docker Desktop 未运行，需先启动 Docker Desktop 应用，等待引擎就绪后再执行上述命令。
+
+### 5. 启动开发服务器
 
 ```bash
 # 终端 1: 启动前端 (端口 5173)
@@ -121,15 +147,19 @@ cd backend && npm run dev
 
 前端访问 http://localhost:5173，后端 API 在 http://localhost:3001。
 
-### 5. 配置 LLM API Key
+### 6. 配置 LLM API Key
 
-后端通过 KodaX `@kodax/ai` 调用 MiniMax LLM，需要设置环境变量：
+在 `backend/.env` 文件中配置：
 
-```bash
-export MINIMAX_API_KEY=your_api_key
+```env
+MINIMAX_API_KEY=your_api_key
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_neo4j_password
+DOCLING_API_URL=http://localhost:5001
 ```
 
-### 6. Mock 模式
+### 7. Mock 模式
 
 前端访问 `http://localhost:5173?mock=true` 可使用 Mock 演示模式（无需后端和 LLM）。
 
@@ -143,6 +173,8 @@ export MINIMAX_API_KEY=your_api_key
 | `NEO4J_URI` | bolt://localhost:7687 | Neo4j 连接地址 |
 | `NEO4J_USERNAME` | neo4j | Neo4j 用户名 |
 | `NEO4J_PASSWORD` | (空) | Neo4j 密码，未配置时使用 Mock 模式 |
+| `DOCLING_API_URL` | http://localhost:5001 | Docling REST API 地址 |
+| `ENABLE_VISION_CHANNEL` | false | 设为 `true` 启用 MiniMax-VL 视觉双通道校验 |
 
 ## 使用方式
 
@@ -170,5 +202,6 @@ export MINIMAX_API_KEY=your_api_key
 - [前端组件文档](frontend/COMPONENTS.md)
 - [部署指南](docs/DEPLOY.md)
 - [工程纪律](docs/ENGINEERING.md)
+- [问题排查手册](docs/TROUBLESHOOT.md)
 - [变更记录](CHANGELOG.md)
 - [Demo 计划](4-15-Demo计划.md)
