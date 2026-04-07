@@ -78,6 +78,75 @@
   font-weight: 600;
 }
 
+/* Markdown Content Styles */
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3 {
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+.markdownContent h2 { font-size: 14px; }
+.markdownContent h3 { font-size: 13px; }
+
+.markdownContent ul,
+.markdownContent ol {
+  padding-left: 20px;
+  margin: 4px 0 8px;
+}
+
+.markdownContent li {
+  margin-bottom: 3px;
+}
+
+.markdownContent code {
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.markdownContent pre {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 6px 0;
+  overflow-x: auto;
+}
+
+.markdownContent pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdownContent table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.markdownContent th,
+.markdownContent td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.markdownContent th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdownContent blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 6px 0;
+  color: var(--text-secondary);
+}
+
 /* File Preview */
 .filePreview {
   display: flex;

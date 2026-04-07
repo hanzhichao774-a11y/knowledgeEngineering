@@ -4,16 +4,26 @@ import { useResultStore } from '../../store/resultStore';
 import styles from './RightPanel.module.css';
 
 const nodeColors: Record<string, string> = {
+  class: '#f59e0b',
   entity: '#3b82f6',
   concept: '#22c55e',
+  attribute: '#6366f1',
   rule: '#a855f7',
 };
 
 const nodeBg: Record<string, string> = {
+  class: 'rgba(245,158,11,0.15)',
   entity: 'rgba(59,130,246,0.12)',
   concept: 'rgba(34,197,94,0.12)',
+  attribute: 'rgba(99,102,241,0.12)',
   rule: 'rgba(168,85,247,0.12)',
 };
+
+const legendItems = [
+  { type: 'class', label: '本体类' },
+  { type: 'entity', label: '实体' },
+  { type: 'attribute', label: '属性' },
+];
 
 export function GraphTab() {
   const graphData = useResultStore((s) => s.graphData);
@@ -50,10 +60,11 @@ export function GraphTab() {
     (node: any, ctx: CanvasRenderingContext2D) => {
       const label = node.label as string;
       const type = (node.type as string) || 'entity';
-      const fontSize = 11;
-      ctx.font = `${fontSize}px -apple-system, sans-serif`;
+      const isClass = type === 'class';
+      const fontSize = isClass ? 12 : 11;
+      ctx.font = `${isClass ? 'bold ' : ''}${fontSize}px -apple-system, sans-serif`;
       const textWidth = ctx.measureText(label).width;
-      const padding = 8;
+      const padding = isClass ? 10 : 8;
       const w = textWidth + padding * 2;
       const h = fontSize + padding * 1.5;
       const x = node.x! - w / 2;
@@ -61,9 +72,17 @@ export function GraphTab() {
 
       ctx.fillStyle = nodeBg[type] ?? nodeBg.entity;
       ctx.strokeStyle = nodeColors[type] ?? nodeColors.entity;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = isClass ? 2 : 1;
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 4);
+      if (isClass) {
+        const cx = node.x!;
+        const cy = node.y!;
+        const rx = w / 2;
+        const ry = h / 2;
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      } else {
+        ctx.roundRect(x, y, w, h, 4);
+      }
       ctx.fill();
       ctx.stroke();
 
@@ -72,7 +91,7 @@ export function GraphTab() {
       ctx.textBaseline = 'middle';
       ctx.fillText(label, node.x!, node.y!);
     },
-    []
+    [],
   );
 
   const linkCanvasObject = useCallback(
@@ -81,22 +100,46 @@ export function GraphTab() {
       const end = link.target;
       if (typeof start !== 'object' || typeof end !== 'object') return;
 
-      ctx.strokeStyle = 'rgba(99,102,241,0.3)';
-      ctx.lineWidth = 1;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len === 0) return;
+      const ux = dx / len;
+      const uy = dy / len;
+
+      ctx.strokeStyle = 'rgba(148,163,184,0.5)';
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
       ctx.stroke();
 
+      const arrowLen = 6;
+      const arrowX = end.x - ux * 12;
+      const arrowY = end.y - uy * 12;
+      ctx.fillStyle = 'rgba(148,163,184,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(arrowX + ux * arrowLen, arrowY + uy * arrowLen);
+      ctx.lineTo(arrowX - uy * 3, arrowY + ux * 3);
+      ctx.lineTo(arrowX + uy * 3, arrowY - ux * 3);
+      ctx.closePath();
+      ctx.fill();
+
       const mx = (start.x + end.x) / 2;
       const my = (start.y + end.y) / 2;
-      ctx.fillStyle = 'rgba(99,102,241,0.6)';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(link.label ?? '', mx, my - 2);
+      const labelText = link.label ?? '';
+      if (labelText) {
+        ctx.font = '9px -apple-system, sans-serif';
+        const tw = ctx.measureText(labelText).width;
+        ctx.fillStyle = 'rgba(15,23,42,0.75)';
+        ctx.fillRect(mx - tw / 2 - 3, my - 7, tw + 6, 12);
+        ctx.fillStyle = 'rgba(226,232,240,0.9)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(labelText, mx, my);
+      }
     },
-    []
+    [],
   );
 
   if (!graphData) {
@@ -119,6 +162,17 @@ export function GraphTab() {
           </span>
         </div>
         <div className={styles.resultCardBody} style={{ padding: 0 }}>
+          <div className={styles.graphLegend}>
+            {legendItems.map((item) => (
+              <span key={item.type} className={styles.legendItem}>
+                <span
+                  className={styles.legendDot}
+                  style={{ background: nodeColors[item.type] }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
           <div ref={containerRef} className={styles.graphContainer}>
             <ForceGraph2D
               graphData={fgData}
@@ -126,28 +180,23 @@ export function GraphTab() {
               height={dims.height}
               nodeCanvasObject={nodeCanvasObject}
               linkCanvasObject={linkCanvasObject}
+              linkDirectionalArrowLength={0}
               nodePointerAreaPaint={(node: any, color, ctx) => {
                 const label = node.label as string;
                 ctx.font = '11px -apple-system, sans-serif';
                 const tw = ctx.measureText(label).width;
-                const w = tw + 16;
-                const h = 23;
+                const w = tw + 20;
+                const h = 26;
                 ctx.fillStyle = color;
                 ctx.fillRect(node.x! - w / 2, node.y! - h / 2, w, h);
               }}
-              cooldownTicks={60}
-              d3AlphaDecay={0.05}
-              d3VelocityDecay={0.3}
+              cooldownTicks={80}
+              d3AlphaDecay={0.04}
+              d3VelocityDecay={0.25}
               backgroundColor="transparent"
             />
           </div>
         </div>
-      </div>
-      <div style={{ padding: '8px 0' }}>
-        <p className={styles.graphHint}>
-          图谱将在 Step 5 完成后更新完整版本。当前展示基于本体提取结果生成的预览。
-        </p>
-        <button className={styles.graphBtn}>🔗 在图数据库中查看完整图谱 →</button>
       </div>
     </div>
   );

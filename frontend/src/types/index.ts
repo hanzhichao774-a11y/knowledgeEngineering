@@ -58,24 +58,46 @@ export interface ChatMessage {
   metadata?: Record<string, unknown>;
 }
 
+export interface OntologyClass {
+  name: string;
+  desc: string;
+}
+
 export interface OntologyEntity {
   name: string;
-  type: 'entity' | 'relation' | 'attr';
+  class: string;
+  desc: string;
+}
+
+export interface OntologyRelation {
+  name: string;
+  source: string;
+  target: string;
+  desc: string;
+}
+
+export interface OntologyAttribute {
+  name: string;
+  entity: string;
+  value: string;
   desc: string;
 }
 
 export interface OntologyResult {
-  entities: OntologyEntity[];
-  entityCount: number;
-  relationCount: number;
-  ruleCount: number;
-  attrCount: number;
+  classes?: OntologyClass[];
+  entities?: OntologyEntity[];
+  relations?: OntologyRelation[];
+  attributes?: OntologyAttribute[];
+  classCount?: number;
+  entityCount?: number;
+  relationCount?: number;
+  attrCount?: number;
 }
 
 export interface GraphNode {
   id: string;
   label: string;
-  type: 'entity' | 'concept' | 'rule';
+  type: string;
 }
 
 export interface GraphEdge {

@@ -31,11 +31,14 @@ export interface Task {
 
 export interface TaskResult {
   ontology: {
-    entities: Array<{ name: string; type: string; desc: string }>;
-    entityCount: number;
-    relationCount: number;
-    ruleCount: number;
-    attrCount: number;
+    classes?: Array<{ name: string; desc: string }>;
+    entities?: Array<{ name: string; class: string; desc: string }>;
+    relations?: Array<{ name: string; source: string; target: string; desc: string }>;
+    attributes?: Array<{ name: string; entity: string; value: string; desc: string }>;
+    classCount?: number;
+    entityCount?: number;
+    relationCount?: number;
+    attrCount?: number;
   };
   schema: string;
   summary: string;
@@ -243,7 +246,7 @@ export class TaskService {
     const basedOnResults = (answerData?.basedOnResults as number) ?? 0;
 
     task.result = {
-      ontology: { entities: [], entityCount: 0, relationCount: 0, ruleCount: 0, attrCount: 0 },
+      ontology: { classes: [], entities: [], relations: [], attributes: [], classCount: 0, entityCount: 0, relationCount: 0, attrCount: 0 },
       schema: '',
       summary: '',
       graphNodeCount: 0,
@@ -309,10 +312,13 @@ export class TaskService {
 
     task.result = {
       ontology: {
-        entities: (ontologyData?.entities as Array<{ name: string; type: string; desc: string }>) ?? [],
+        classes: (ontologyData?.classes as Array<{ name: string; desc: string }>) ?? [],
+        entities: (ontologyData?.entities as Array<{ name: string; class: string; desc: string }>) ?? [],
+        relations: (ontologyData?.relations as Array<{ name: string; source: string; target: string; desc: string }>) ?? [],
+        attributes: (ontologyData?.attributes as Array<{ name: string; entity: string; value: string; desc: string }>) ?? [],
+        classCount: (ontologyData?.classCount as number) ?? 0,
         entityCount: (ontologyData?.entityCount as number) ?? 0,
         relationCount: (ontologyData?.relationCount as number) ?? 0,
-        ruleCount: (ontologyData?.ruleCount as number) ?? 0,
         attrCount: (ontologyData?.attrCount as number) ?? 0,
       },
       schema: (schemaData?.schema as string) ?? '',
@@ -345,7 +351,7 @@ export class TaskService {
           content: `<p>✅ <strong>知识工程任务已完成</strong></p>
 <p>知识工程数字员工 #KE-01 已完成全部 ${task.steps.length} 个步骤：</p>
 <p>• 文档解析 → 本体提取 → Schema 构建 → 图数据库写入 → 知识图谱生成</p>
-<p>📊 产出：${task.result.ontology.entityCount} 个实体、${task.result.ontology.relationCount} 条关系、${task.result.ontology.ruleCount} 条规则</p>
+<p>📊 产出：${task.result.ontology.classCount ?? 0} 个本体类、${task.result.ontology.entityCount ?? 0} 个实体、${task.result.ontology.relationCount ?? 0} 条关系</p>
 <p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
           timestamp: new Date().toTimeString().slice(0, 5),
         },

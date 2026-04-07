@@ -1,23 +1,40 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
-import { callLLM, extractJSON } from '../services/LLMService.js';
-import { queryByKeywords, runCypher, getGraphSchema, isNeo4jConnected } from '../db/neo4j.js';
+import { queryByKeywords, isNeo4jConnected } from '../db/neo4j.js';
 
-const CYPHER_SYSTEM_PROMPT = `你是一个 Neo4j Cypher 查询专家。根据用户的问题和图数据库的 Schema 信息，生成一条 Cypher 查询语句来检索相关知识。
+/**
+ * Extract search keywords from a Chinese question without LLM.
+ * Splits on common stop words / punctuation and filters short fragments.
+ */
+function extractKeywords(question: string): string[] {
+  const stopWords = new Set([
+    '的', '了', '吗', '呢', '是', '在', '有', '和', '与', '及', '或',
+    '请问', '什么', '多少', '哪些', '怎么', '如何', '为什么', '请',
+    '告诉', '我', '你', '他', '她', '它', '们', '这', '那', '个',
+    '一', '不', '也', '都', '就', '还', '会', '能', '要', '该',
+    '当', '当天', '今天', '昨天', '目前', '现在', '其中',
+    '一下', '一些', '所有', '全部', '关于', '对于',
+  ]);
 
-规则：
-- 只生成 MATCH / OPTIONAL MATCH / WHERE / RETURN / LIMIT 语句
-- 不要使用 CREATE / DELETE / SET / MERGE 等写操作
-- 使用模糊匹配：WHERE n.name CONTAINS '关键词' 或 WHERE n.description CONTAINS '关键词'
-- LIMIT 不超过 20
-- 同时返回关联的关系和邻居节点
+  const separators = /[，。？！、；：""''（）\s,.\?!;:()[\]{}<>·\-—_\/\\|@#$%^&*+=~`]/;
+  const tokens = question
+    .split(separators)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
 
-返回 JSON 格式：
-\`\`\`json
-{
-  "cypher": "<Cypher查询语句>",
-  "keywords": ["关键词1", "关键词2"]
+  const keywords: string[] = [];
+  for (const token of tokens) {
+    const cleaned = [...stopWords].reduce((s, w) => s.replace(new RegExp(`^${w}|${w}$`, 'g'), ''), token).trim();
+    if (cleaned.length >= 2) {
+      keywords.push(cleaned);
+    }
+  }
+
+  if (keywords.length === 0 && question.trim().length >= 2) {
+    keywords.push(question.trim());
+  }
+
+  return [...new Set(keywords)];
 }
-\`\`\``;
 
 export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<SkillResult> {
   const startTime = Date.now();
@@ -34,37 +51,38 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
   }
 
   try {
-    const schema = await getGraphSchema();
-    const schemaDesc = schema
-      ? `节点标签: ${schema.nodeLabels.join(', ')}\n关系类型: ${schema.relationshipTypes.join(', ')}`
-      : '无 Schema 信息';
-
-    const userPrompt = `图数据库 Schema:\n${schemaDesc}\n\n用户问题: ${question}`;
-    const { text, usage } = await callLLM(CYPHER_SYSTEM_PROMPT, userPrompt);
-    const parsed = extractJSON<{ cypher: string; keywords: string[] }>(text);
+    const keywords = extractKeywords(question);
+    console.log(`[Skill:knowledgeRetrieve] Local keywords: [${keywords.join(', ')}]`);
 
     let results: Record<string, unknown>[] = [];
-    let source = 'cypher';
 
-    try {
-      const cypherResults = await runCypher(parsed.cypher);
-      results = cypherResults ?? [];
-      console.log(`[Skill:knowledgeRetrieve] Cypher returned ${results.length} records`);
-    } catch (cypherErr) {
-      console.warn('[Skill:knowledgeRetrieve] Cypher failed, falling back to keyword search:', (cypherErr as Error).message);
-      source = 'keywords';
-    }
-
-    if (results.length === 0 && parsed.keywords?.length > 0) {
-      const kwResults = await queryByKeywords(parsed.keywords);
+    if (keywords.length > 0) {
+      const kwResults = await queryByKeywords(keywords);
       if (kwResults && kwResults.length > 0) {
         results = kwResults as unknown as Record<string, unknown>[];
-        source = 'keywords';
-        console.log(`[Skill:knowledgeRetrieve] Keyword search returned ${results.length} records`);
+        console.log(`[Skill:knowledgeRetrieve] Found ${results.length} records via keyword search`);
+      }
+    }
+
+    if (results.length === 0) {
+      const fragments = question.replace(/[？?。，！!,.]/g, '').trim();
+      const twoCharKeywords: string[] = [];
+      for (let i = 0; i < fragments.length - 1; i++) {
+        twoCharKeywords.push(fragments.slice(i, i + 2));
+      }
+      const uniqueFragments = [...new Set(twoCharKeywords)].slice(0, 10);
+      if (uniqueFragments.length > 0) {
+        console.log(`[Skill:knowledgeRetrieve] Fallback sliding-window keywords: [${uniqueFragments.join(', ')}]`);
+        const fallbackResults = await queryByKeywords(uniqueFragments);
+        if (fallbackResults && fallbackResults.length > 0) {
+          results = fallbackResults as unknown as Record<string, unknown>[];
+          console.log(`[Skill:knowledgeRetrieve] Fallback found ${results.length} records`);
+        }
       }
     }
 
     const duration = (Date.now() - startTime) / 1000;
+    console.log(`[Skill:knowledgeRetrieve] Done in ${duration.toFixed(2)}s — ${results.length} results, 0 tokens used`);
     return {
       skillName: '知识检索',
       status: 'success',
@@ -72,10 +90,10 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
         question,
         results,
         resultCount: results.length,
-        source,
-        cypher: parsed.cypher,
+        source: 'local',
+        keywords,
       },
-      tokenUsed: usage?.inputTokens ?? 0,
+      tokenUsed: 0,
       duration,
     };
   } catch (err) {

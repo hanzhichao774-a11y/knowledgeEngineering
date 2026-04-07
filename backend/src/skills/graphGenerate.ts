@@ -1,55 +1,49 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
+import type { OntologyData } from './ontologyExtract.js';
 
-/**
- * Generates graph visualization data (nodes + edges) from ontology results.
- * This is a deterministic transform — no LLM call needed.
- */
 export async function graphGenerateSkill(ctx: ExecutionContext): Promise<SkillResult> {
   const startTime = Date.now();
   const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
-  const ontologyData = ontologyResult?.data as {
-    entities?: Array<{ name: string; type: string; desc: string }>;
-  } | undefined;
+  const data = ontologyResult?.data as OntologyData | undefined;
 
-  const entities = ontologyData?.entities ?? [];
+  const classes = data?.classes ?? [];
+  const entities = data?.entities ?? [];
+  const relations = data?.relations ?? [];
 
-  const nodeEntities = entities.filter((e) => e.type !== 'relation');
-  const relationEntities = entities.filter((e) => e.type === 'relation');
+  let idCounter = 0;
+  const nameToId = new Map<string, string>();
 
-  const typeMap: Record<string, 'entity' | 'concept' | 'rule'> = {
-    entity: 'entity',
-    attr: 'concept',
-    rule: 'rule',
-  };
+  const nodes: Array<{ id: string; label: string; type: string }> = [];
 
-  const nodes = nodeEntities.map((e, i) => ({
-    id: `n${i + 1}`,
-    label: e.name,
-    type: typeMap[e.type] ?? 'entity',
-  }));
+  for (const cls of classes) {
+    const id = `c${++idCounter}`;
+    nameToId.set(cls.name, id);
+    nodes.push({ id, label: cls.name, type: 'class' });
+  }
 
-  const nodeNameToId = new Map(nodes.map((n) => [n.label, n.id]));
+  for (const entity of entities) {
+    const id = `e${++idCounter}`;
+    nameToId.set(entity.name, id);
+    nodes.push({ id, label: entity.name, type: 'entity' });
+  }
 
-  const edges = relationEntities
-    .map((rel) => {
-      const parts = rel.desc.split('→').map((s) => s.trim());
-      if (parts.length === 2) {
-        const sourceId = nodeNameToId.get(parts[0]);
-        const targetId = nodeNameToId.get(parts[1]);
-        if (sourceId && targetId) {
-          return { source: sourceId, target: targetId, label: rel.name };
-        }
+  const edges: Array<{ source: string; target: string; label: string }> = [];
+
+  for (const entity of entities) {
+    if (entity.class) {
+      const classId = nameToId.get(entity.class);
+      const entityId = nameToId.get(entity.name);
+      if (classId && entityId) {
+        edges.push({ source: entityId, target: classId, label: '属于' });
       }
-      return null;
-    })
-    .filter((e): e is NonNullable<typeof e> => e !== null);
+    }
+  }
 
-  if (edges.length < 3 && nodes.length >= 3) {
-    for (let i = 0; i < Math.min(nodes.length - 1, 5); i++) {
-      const exists = edges.some((e) => e.source === nodes[i].id && e.target === nodes[i + 1].id);
-      if (!exists) {
-        edges.push({ source: nodes[i].id, target: nodes[i + 1].id, label: '关联' });
-      }
+  for (const rel of relations) {
+    const sourceId = nameToId.get(rel.source);
+    const targetId = nameToId.get(rel.target);
+    if (sourceId && targetId) {
+      edges.push({ source: sourceId, target: targetId, label: rel.name });
     }
   }
 

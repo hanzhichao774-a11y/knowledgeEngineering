@@ -46,6 +46,16 @@ export async function sendChat(taskId: string, content: string) {
   return data;
 }
 
+export async function fetchKnowledgeStatus() {
+  const { data } = await api.get('/knowledge/status');
+  return data as { connected: boolean; nodeCount: number; edgeCount: number };
+}
+
+export async function fetchNeo4jGraph() {
+  const { data } = await api.get('/graph/neo4j/all');
+  return data;
+}
+
 export function getWsUrl() {
   const base = BASE_URL.replace(/^http/, 'ws');
   return `${base}/ws`;

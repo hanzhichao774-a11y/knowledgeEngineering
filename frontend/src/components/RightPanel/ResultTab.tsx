@@ -1,26 +1,18 @@
 import { useResultStore } from '../../store/resultStore';
 import styles from './RightPanel.module.css';
 
-const typeTagClass: Record<string, string> = {
-  entity: styles.typeEntity,
-  relation: styles.typeRelation,
-  attr: styles.typeAttr,
-};
-
-const typeLabel: Record<string, string> = {
-  entity: '实体',
-  relation: '关系',
-  attr: '属性',
-};
-
 export function ResultTab() {
   const { ontologyResult, schemaContent, schemaStatus, schemaProgress, documentSummary } =
     useResultStore();
 
+  const classes = ontologyResult?.classes ?? [];
+  const entities = ontologyResult?.entities ?? [];
+  const relations = ontologyResult?.relations ?? [];
+  const hasOntology = classes.length > 0 || entities.length > 0 || relations.length > 0;
+
   return (
     <div>
-      {/* Ontology Extraction Result */}
-      {ontologyResult && (
+      {hasOntology && (
         <div className={styles.resultCard}>
           <div className={styles.resultCardHeader}>
             <span className={styles.resultIcon}>🔍</span>
@@ -28,59 +20,85 @@ export function ResultTab() {
             <span className={`${styles.resultBadge} ${styles.badgeSuccess}`}>已完成</span>
           </div>
           <div className={styles.resultCardBody}>
-            <table className={styles.schemaTable}>
-              <thead>
-                <tr>
-                  <th>名称</th>
-                  <th>类型</th>
-                  <th>描述</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ontologyResult.entities.map((e, i) => (
-                  <tr key={i}>
-                    <td>{e.name}</td>
-                    <td>
-                      <span className={`${styles.typeTag} ${typeTagClass[e.type] ?? ''}`}>
-                        {typeLabel[e.type] ?? e.type}
-                      </span>
-                    </td>
-                    <td>{e.desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {classes.length > 0 && (
+              <>
+                <p className={styles.sectionLabel}>本体类 ({classes.length})</p>
+                <table className={styles.schemaTable}>
+                  <thead>
+                    <tr><th>类名</th><th>描述</th></tr>
+                  </thead>
+                  <tbody>
+                    {classes.map((c, i) => (
+                      <tr key={i}>
+                        <td><span className={`${styles.typeTag} ${styles.typeClass}`}>{c.name}</span></td>
+                        <td>{c.desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            {entities.length > 0 && (
+              <>
+                <p className={styles.sectionLabel}>实体 ({entities.length})</p>
+                <table className={styles.schemaTable}>
+                  <thead>
+                    <tr><th>名称</th><th>所属类</th><th>描述</th></tr>
+                  </thead>
+                  <tbody>
+                    {entities.map((e, i) => (
+                      <tr key={i}>
+                        <td>{e.name}</td>
+                        <td><span className={`${styles.typeTag} ${styles.typeEntity}`}>{e.class}</span></td>
+                        <td>{e.desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            {relations.length > 0 && (
+              <>
+                <p className={styles.sectionLabel}>关系 ({relations.length})</p>
+                <table className={styles.schemaTable}>
+                  <thead>
+                    <tr><th>关系</th><th>起始</th><th>目标</th><th>描述</th></tr>
+                  </thead>
+                  <tbody>
+                    {relations.map((r, i) => (
+                      <tr key={i}>
+                        <td><span className={`${styles.typeTag} ${styles.typeRelation}`}>{r.name}</span></td>
+                        <td>{r.source}</td>
+                        <td>{r.target}</td>
+                        <td>{r.desc}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
             <p className={styles.resultFooter}>
-              共 {ontologyResult.entityCount} 个实体 · {ontologyResult.relationCount} 条关系 · 点击查看全部 →
+              共 {ontologyResult?.classCount ?? classes.length} 个本体类 · {ontologyResult?.entityCount ?? entities.length} 个实体 · {ontologyResult?.relationCount ?? relations.length} 条关系
             </p>
           </div>
         </div>
       )}
 
-      {/* Schema Building */}
       {schemaContent && (
         <div className={styles.resultCard}>
           <div className={styles.resultCardHeader}>
             <span className={styles.resultIcon}>📊</span>
             <span className={styles.resultTitle}>Schema 构建</span>
-            <span
-              className={`${styles.resultBadge} ${
-                schemaStatus === 'done' ? styles.badgeSuccess : styles.badgeRunning
-              }`}
-            >
+            <span className={`${styles.resultBadge} ${schemaStatus === 'done' ? styles.badgeSuccess : styles.badgeRunning}`}>
               {schemaStatus === 'done' ? '已完成' : `构建中 ${schemaProgress}%`}
             </span>
           </div>
           <div className={styles.resultCardBody}>
-            <div
-              className={styles.codeBlock}
-              dangerouslySetInnerHTML={{ __html: schemaContent }}
-            />
+            <div className={styles.codeBlock} dangerouslySetInnerHTML={{ __html: schemaContent }} />
           </div>
         </div>
       )}
 
-      {/* Document Summary */}
       {documentSummary && (
         <div className={styles.resultCard}>
           <div className={styles.resultCardHeader}>
@@ -90,14 +108,11 @@ export function ResultTab() {
           </div>
           <div className={styles.resultCardBody}>
             <p className={styles.summaryText}>{documentSummary}</p>
-            <div style={{ marginTop: 8 }}>
-              <a href="#" className={styles.viewLink}>📎 查看原文 →</a>
-            </div>
           </div>
         </div>
       )}
 
-      {!ontologyResult && !schemaContent && !documentSummary && (
+      {!hasOntology && !schemaContent && !documentSummary && (
         <div className={styles.emptyState}>
           <p>暂无产出结果</p>
           <p className={styles.emptyHint}>上传文档并启动任务后，结果将在此展示</p>

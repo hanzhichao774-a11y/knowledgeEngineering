@@ -7,7 +7,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useTaskStore } from './store/taskStore';
 import { useChatStore } from './store/chatStore';
 import { useResultStore } from './store/resultStore';
-import { getWsUrl, fetchTaskResult, fetchGraphData } from './services/api';
+import { getWsUrl, fetchTaskResult, fetchGraphData, fetchKnowledgeStatus, fetchNeo4jGraph } from './services/api';
 import { useMockFlow } from './hooks/useMockFlow';
 import './styles/global.css';
 
@@ -23,6 +23,11 @@ export default function App() {
     if (isMock) initialize();
   }, [isMock, initialize]);
 
+  useEffect(() => {
+    if (isMock) return;
+    hydrateFromNeo4j();
+  }, [isMock]);
+
   useWebSocket(isMock ? '' : getWsUrl(), (event) => {
     if (isMock) return;
     handleWSEvent(event);
@@ -35,6 +40,22 @@ export default function App() {
       right={<RightPanel />}
     />
   );
+}
+
+async function hydrateFromNeo4j() {
+  try {
+    const status = await fetchKnowledgeStatus();
+    if (!status.connected || status.nodeCount === 0) return;
+
+    const graphData = await fetchNeo4jGraph();
+    if (graphData && !graphData.error && graphData.nodes?.length > 0) {
+      const resultStore = useResultStore.getState();
+      resultStore.setGraphData(graphData);
+      console.log(`[Hydrate] Loaded ${graphData.nodes.length} nodes, ${graphData.edges.length} edges from Neo4j`);
+    }
+  } catch (err) {
+    console.warn('[Hydrate] Failed to load from Neo4j:', err);
+  }
 }
 
 function handleWSEvent(event: Record<string, unknown>) {

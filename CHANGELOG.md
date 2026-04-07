@@ -8,6 +8,40 @@
 
 ---
 
+## [0.4.0] - 2026-04-07
+
+知识图谱三项优化 + LLM 调用健壮性 + 知识检索本地化。
+
+### Added
+
+- **知识图谱可视化增强**：节点按类型着色（类=金色椭圆、实体=蓝色、属性=紫色），关系连线带方向箭头和标签背景
+- **四层本体提取**：LLM prompt 重写，输出 classes / entities / relations（显式 source→target）/ attributes 四层结构
+- **Markdown 答案渲染**：前端集成 `react-markdown` + `remark-gfm`，assistant 消息支持标题、列表、表格、代码块
+- **页面刷新数据恢复**：前端启动时调用 `GET /api/knowledge/status` 和 `GET /api/graph/neo4j/all` 从 Neo4j 加载已有图谱
+- **Neo4j 全属性搜索**：`_searchText` 属性记录实体的所有属性键值对，`queryByKeywords` 搜索覆盖 name + description + _searchText
+- **LLM 空响应自动重试**：`callLLM` 遇到空响应 / 超时 / 连接重置时自动重试（最多 2 次），递增等待
+- **JSON 解析容错**：`extractJSON` 三层修复（直接解析 → 修尾逗号+补引号 → 截断补括号），大幅降低 LLM 输出格式不规范导致的失败率
+- **图谱节点类型图例**：GraphTab 底部显示颜色图例（类、实体、概念、规则、属性）
+
+### Changed
+
+- **知识检索零 token 消耗**：`knowledgeRetrieveSkill` 从 LLM 生成 Cypher 改为纯本地关键词提取 + Neo4j 关键词搜索，检索步骤不再消耗 LLM token
+- **检索结果包含完整属性**：`queryByKeywords` 返回 `properties(n)` 全部属性，答案生成器可引用具体数值（如 `总耗气量值: 18912Nm³`）
+- **答案生成 prompt 优化**：明确要求 LLM 引用原始数值，结构化传入实体属性和关联关系
+- **本体提取 prompt 重写**：从简单 entities 列表改为 classes/entities/relations/attributes 四层结构
+- **graphDBWrite 适配新结构**：写入 Class 节点、Entity 节点（带动态 label）、显式 source→target 关系、属性作为节点 property
+- **graphGenerate 适配新结构**：类节点椭圆、实体节点方块、关系基于显式 source/target、移除模糊关联
+- **ResultTab 重构**：本体结果分三表展示（本体类 / 实体 / 关系）
+
+### Fixed
+
+- **LLM 偶发空响应导致文档解析失败**：MiniMax 偶尔返回 0 tokens，之前直接失败；现在自动重试最多 2 次
+- **本体提取 JSON 解析失败**：LLM 输出 JSON 尾逗号 / 截断时 `JSON.parse` 直接报错；现在三层容错修复
+- **知识检索消耗 token**：检索步骤调 LLM 生成 Cypher 浪费 token；改为纯本地关键词搜索，零 token
+- **检索到记录但缺少具体数值**：`queryByKeywords` 只返回 name/desc，不含属性值；现在返回节点全部属性
+
+---
+
 ## [0.3.0] - 2026-04-02
 
 知识检索闭环：入库后可直接提问查询已有知识，无需重新上传文档。

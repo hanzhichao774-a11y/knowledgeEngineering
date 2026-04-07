@@ -42,60 +42,147 @@ export async function withSession<T>(fn: (session: Session) => Promise<T>): Prom
   }
 }
 
-export async function writeOntologyToGraph(ontology: {
-  entities: Array<{ name: string; type: string; desc: string }>;
-}) {
+export interface OntologyInput {
+  classes?: Array<{ name: string; desc: string }>;
+  entities?: Array<{ name: string; class: string; desc: string }>;
+  relations?: Array<{ name: string; source: string; target: string; desc: string }>;
+  attributes?: Array<{ name: string; entity: string; value: string; desc: string }>;
+}
+
+export async function writeOntologyToGraph(ontology: OntologyInput) {
   return withSession(async (session) => {
-    for (const entity of ontology.entities) {
-      if (entity.type === 'entity' || entity.type === 'concept' || entity.type === 'attr') {
+    let nodesWritten = 0;
+    let edgesWritten = 0;
+
+    for (const cls of ontology.classes ?? []) {
+      await session.run(
+        `MERGE (n:Class {name: $name})
+         SET n.description = $desc, n.nodeType = 'class', n.updatedAt = datetime()`,
+        { name: cls.name, desc: cls.desc },
+      );
+      nodesWritten++;
+    }
+
+    for (const entity of ontology.entities ?? []) {
+      const label = sanitizeLabel(entity.class || 'Entity');
+      await session.run(
+        `MERGE (n:Entity {name: $name})
+         SET n.description = $desc, n.class = $cls, n.nodeType = 'entity', n.updatedAt = datetime()
+         WITH n
+         CALL { WITH n SET n:${label} } IN TRANSACTIONS OF 1 ROW`,
+        { name: entity.name, desc: entity.desc, cls: entity.class },
+      ).catch(async () => {
         await session.run(
-          `MERGE (n:${capitalize(entity.type)} {name: $name})
-           SET n.description = $desc, n.updatedAt = datetime()`,
-          { name: entity.name, desc: entity.desc }
+          `MERGE (n:Entity {name: $name})
+           SET n.description = $desc, n.class = $cls, n.nodeType = 'entity', n.updatedAt = datetime()`,
+          { name: entity.name, desc: entity.desc, cls: entity.class },
         );
+      });
+      nodesWritten++;
+    }
+
+    for (const rel of ontology.relations ?? []) {
+      const relType = sanitizeRelType(rel.name);
+      try {
+        await session.run(
+          `MATCH (a:Entity {name: $source}), (b:Entity {name: $target})
+           MERGE (a)-[r:${relType}]->(b)
+           SET r.description = $desc`,
+          { source: rel.source, target: rel.target, desc: rel.desc },
+        );
+        edgesWritten++;
+      } catch (e) {
+        console.warn(`[Neo4j] Failed to write relation ${rel.source}-[${rel.name}]->${rel.target}:`, (e as Error).message);
       }
     }
 
-    for (const entity of ontology.entities) {
-      if (entity.type === 'relation') {
-        const parts = entity.desc.split('→').map((s) => s.trim());
-        if (parts.length === 2) {
-          await session.run(
-            `MATCH (a {name: $from}), (b {name: $to})
-             MERGE (a)-[r:${entity.name.toUpperCase().replace(/\s/g, '_')}]->(b)`,
-            { from: parts[0], to: parts[1] }
-          );
-        }
+    const entitySearchTexts = new Map<string, string[]>();
+
+    for (const attr of ontology.attributes ?? []) {
+      const propKey = sanitizePropKey(attr.name);
+      try {
+        await session.run(
+          `MATCH (n:Entity {name: $entity})
+           SET n.${propKey} = $value`,
+          { entity: attr.entity, value: attr.value },
+        );
+        const parts = entitySearchTexts.get(attr.entity) ?? [];
+        parts.push(`${attr.name}:${attr.value}`);
+        entitySearchTexts.set(attr.entity, parts);
+      } catch {
+        // property key might be invalid — skip silently
       }
     }
 
-    return { success: true };
+    for (const [entityName, parts] of entitySearchTexts) {
+      const searchText = parts.join(' | ');
+      try {
+        await session.run(
+          `MATCH (n:Entity {name: $name})
+           SET n._searchText = COALESCE(n._searchText, '') + ' | ' + $text`,
+          { name: entityName, text: searchText },
+        );
+      } catch {
+        // non-critical
+      }
+    }
+
+    console.log(`[Neo4j] Written: ${nodesWritten} nodes, ${edgesWritten} edges`);
+    return { success: true, nodesWritten, edgesWritten };
   });
 }
 
-export async function readGraphData(limit = 50) {
+function sanitizeLabel(s: string): string {
+  return s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_').replace(/^_+|_+$/g, '') || 'Entity';
+}
+
+function sanitizeRelType(s: string): string {
+  return s.toUpperCase().replace(/[^A-Z0-9\u4e00-\u9fff_]/g, '_').replace(/^_+|_+$/g, '') || 'RELATED_TO';
+}
+
+function sanitizePropKey(s: string): string {
+  return s.replace(/[^a-zA-Z0-9\u4e00-\u9fff_]/g, '_').replace(/^_+|_+$/g, '') || 'prop';
+}
+
+export async function readGraphData(limit = 100) {
   return withSession(async (session) => {
     const nodesResult = await session.run(
-      'MATCH (n) RETURN n.name AS label, labels(n)[0] AS type, id(n) AS id LIMIT $limit',
-      { limit: neo4j.int(limit) }
+      `MATCH (n)
+       RETURN n.name AS label, COALESCE(n.nodeType, 'entity') AS nodeType,
+              labels(n) AS allLabels, id(n) AS id
+       LIMIT $limit`,
+      { limit: neo4j.int(limit) },
     );
 
     const edgesResult = await session.run(
-      'MATCH (a)-[r]->(b) RETURN id(a) AS source, id(b) AS target, type(r) AS label LIMIT $limit',
-      { limit: neo4j.int(limit) }
+      `MATCH (a)-[r]->(b)
+       RETURN id(a) AS source, id(b) AS target, type(r) AS label, r.description AS desc
+       LIMIT $limit`,
+      { limit: neo4j.int(limit) },
     );
 
     return {
       nodes: nodesResult.records.map((r) => ({
         id: r.get('id').toString(),
-        label: r.get('label'),
-        type: (r.get('type') || 'entity').toLowerCase(),
+        label: r.get('label') as string,
+        type: r.get('nodeType') as string,
       })),
       edges: edgesResult.records.map((r) => ({
         source: r.get('source').toString(),
         target: r.get('target').toString(),
-        label: r.get('label').replace(/_/g, ' ').toLowerCase(),
+        label: (r.get('label') as string).replace(/_/g, ' ').toLowerCase(),
       })),
+    };
+  });
+}
+
+export async function getKnowledgeStatus() {
+  return withSession(async (session) => {
+    const nodeCount = await session.run('MATCH (n) RETURN count(n) AS cnt');
+    const edgeCount = await session.run('MATCH ()-[r]->() RETURN count(r) AS cnt');
+    return {
+      nodeCount: (nodeCount.records[0]?.get('cnt') as { toNumber(): number })?.toNumber() ?? 0,
+      edgeCount: (edgeCount.records[0]?.get('cnt') as { toNumber(): number })?.toNumber() ?? 0,
     };
   });
 }
@@ -108,20 +195,29 @@ export async function queryByKeywords(keywords: string[], limit = 30) {
   return withSession(async (session) => {
     const result = await session.run(
       `MATCH (n)
-       WHERE any(k IN $keywords WHERE n.name CONTAINS k OR n.description CONTAINS k)
+       WHERE any(k IN $keywords WHERE
+         toLower(n.name) CONTAINS toLower(k) OR
+         toLower(COALESCE(n.description,'')) CONTAINS toLower(k) OR
+         toLower(COALESCE(n._searchText,'')) CONTAINS toLower(k))
        OPTIONAL MATCH (n)-[r]-(m)
        RETURN n.name AS name, labels(n)[0] AS type, n.description AS desc,
-              collect(DISTINCT {rel: type(r), target: m.name}) AS relations
+              properties(n) AS props,
+              collect(DISTINCT {rel: type(r), target: m.name, targetDesc: m.description}) AS relations
        LIMIT $limit`,
       { keywords, limit: neo4j.int(limit) },
     );
-    return result.records.map((r) => ({
-      name: r.get('name') as string,
-      type: (r.get('type') as string || 'entity').toLowerCase(),
-      desc: r.get('desc') as string | null,
-      relations: (r.get('relations') as Array<{ rel: string; target: string }>)
-        .filter((rel) => rel.target != null),
-    }));
+    return result.records.map((r) => {
+      const props = r.get('props') as Record<string, unknown>;
+      const { name, description, nodeType, class: _cls, updatedAt, _searchText, ...attributes } = props;
+      return {
+        name: r.get('name') as string,
+        type: (r.get('type') as string || 'entity').toLowerCase(),
+        desc: r.get('desc') as string | null,
+        attributes,
+        relations: (r.get('relations') as Array<{ rel: string; target: string; targetDesc: string }>)
+          .filter((rel) => rel.target != null),
+      };
+    });
   });
 }
 

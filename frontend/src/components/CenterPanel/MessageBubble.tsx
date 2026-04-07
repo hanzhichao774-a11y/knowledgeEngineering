@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../types';
 import styles from './CenterPanel.module.css';
 
@@ -30,10 +32,16 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
           <span className={`${styles.msgRole} ${role.className}`}>{role.text}</span>
           <span className={styles.msgTime}>{msg.timestamp}</span>
         </div>
-        <div
-          className={styles.msgContent}
-          dangerouslySetInnerHTML={{ __html: msg.content }}
-        />
+        {msg.role === 'assistant' ? (
+          <div className={`${styles.msgContent} ${styles.markdownContent}`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          </div>
+        ) : (
+          <div
+            className={styles.msgContent}
+            dangerouslySetInnerHTML={{ __html: msg.content }}
+          />
+        )}
         {msg.attachment && (
           <div className={styles.filePreview}>
             <span className={styles.fileIcon}>📄</span>
