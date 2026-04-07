@@ -322,7 +322,7 @@ export class TaskService {
         attrCount: (ontologyData?.attrCount as number) ?? 0,
       },
       schema: (schemaData?.schema as string) ?? '',
-      summary: (docData?.summary as string) ?? '',
+      summary: buildSummaryWithValidation(docData),
       graphNodeCount: (graphData?.nodeCount as number) ?? 0,
       graphEdgeCount: (graphData?.edgeCount as number) ?? 0,
     };
@@ -358,6 +358,35 @@ export class TaskService {
       });
     }
   }
+}
+
+function buildSummaryWithValidation(docData: Record<string, unknown> | undefined): string {
+  const summary = (docData?.summary as string) ?? '';
+  const validation = docData?.validation as Record<string, unknown> | undefined;
+  if (!validation || !validation.mode) return summary;
+
+  const confidenceMap: Record<string, string> = {
+    high: '高置信（双通道一致）',
+    medium: '中置信（单通道或差异<5%）',
+    low: '低置信（双通道差异>=5%）',
+  };
+
+  const mode = validation.mode as string;
+  const confidence = validation.confidence as string;
+  const label = confidenceMap[confidence] ?? confidence;
+
+  let validationNote = `\n\n---\n**解析校验**: ${mode === 'dual-channel' ? '双通道交叉校验' : '单通道'} | **置信度**: ${label}`;
+
+  if (validation.totalCells) {
+    validationNote += ` | **单元格**: ${validation.matchedCells}/${validation.totalCells} 匹配`;
+  }
+
+  const mismatches = validation.mismatchedCells as number | undefined;
+  if (mismatches && mismatches > 0) {
+    validationNote += ` | **差异**: ${mismatches} 个单元格`;
+  }
+
+  return summary + validationNote;
 }
 
 function formatElapsed(ms: number): string {

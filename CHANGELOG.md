@@ -8,6 +8,47 @@
 
 ---
 
+## [0.5.0] - 2026-04-07
+
+文档解析架构升级：Docling 结构化解析替代 pdf-parse，多格式支持，双通道交叉校验框架。
+
+### Added
+
+- **Docling 结构化解析（Docker）**：替代 pdf-parse，使用 IBM 开源 TableFormer 模型识别表格结构，精度 97.9%，通过 Docker 容器 `docling-serve` 本地部署
+- **多格式文档支持**：Excel（`exceljs` 原生单元格读取，100% 精确）、Word（`mammoth` HTML 转 Markdown）、PDF（Docling）、纯文本
+- **DocumentParserService**：统一格式路由，按扩展名自动分发到对应解析器
+- **双通道交叉校验框架**：CrossValidator 对比引擎（逐单元格比对、数值容差 0.1%、置信度评分 high/medium/low），VisionExtractService（MiniMax-VL 视觉提取 + pdf2pic PDF 转图片）
+- **ChunkService Markdown 感知**：识别 Markdown 表格，按 5 行一组分块，每个 chunk 自动附加表头上下文
+- **解析校验信息**：文档摘要末尾展示解析模式（单通道/双通道）、置信度、单元格匹配率
+- **`ENABLE_VISION_CHANNEL` 环境变量**：在 `backend/.env` 中设置 `ENABLE_VISION_CHANNEL=true` 启用 MiniMax-VL 视觉双通道校验（默认关闭）
+
+### Changed
+
+- **documentParse Skill 重写**：移除 pdf-parse 和全部 preprocessTableText/tokenizeNumbers 启发式代码，改用 DocumentParserService
+- **PDF 表格数据不再拼接错误**：之前 pdf-parse 将表格列数据拼接为连续字符串（如 396→3968），Docling 从表格结构层面解决
+
+### Removed
+
+- **pdf-parse 依赖**：已由 Docling + exceljs + mammoth 替代
+- **preprocessTableText / tokenizeNumbers**：启发式数字拆分逻辑，不再需要
+
+### 系统依赖
+
+- Docker Desktop（运行 Docling 容器）
+- GraphicsMagick + Ghostscript（`brew install graphicsmagick ghostscript`，pdf2pic 需要）
+
+### 启用双通道交叉校验
+
+> **重要**：当前默认只走 Docling 单通道（快速、稳定、免费）。如需启用 MiniMax-VL 视觉双通道交叉校验，需要：
+>
+> 1. 在 `backend/.env` 中添加 `ENABLE_VISION_CHANNEL=true`
+> 2. 确保 MiniMax API 套餐支持视觉模型（如 MiniMax-Text-01）
+> 3. 重启后端服务
+>
+> 未来接入更强 VLM（如 GPT-4V、Claude Vision）时，只需修改 VisionExtractService 中的模型和端点配置。
+
+---
+
 ## [0.4.0] - 2026-04-07
 
 知识图谱三项优化 + LLM 调用健壮性 + 知识检索本地化。

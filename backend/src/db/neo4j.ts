@@ -1,4 +1,5 @@
 import neo4j, { type Driver, type Session } from 'neo4j-driver';
+import { EMBEDDING_DIMENSION } from '../services/EmbeddingService.js';
 
 let driver: Driver | null = null;
 
@@ -21,6 +22,9 @@ export function initNeo4j(config?: Neo4jConfig): Driver | null {
   try {
     driver = neo4j.driver(uri, neo4j.auth.basic(username, password));
     console.log(`Neo4j connected to ${uri}`);
+    ensureVectorIndex().catch((err) => {
+      console.warn('[Neo4j] Vector index creation skipped:', (err as Error).message);
+    });
     return driver;
   } catch (err) {
     console.error('Failed to connect to Neo4j:', err);
@@ -148,6 +152,7 @@ export async function readGraphData(limit = 100) {
   return withSession(async (session) => {
     const nodesResult = await session.run(
       `MATCH (n)
+       WHERE NOT n:Chunk
        RETURN n.name AS label, COALESCE(n.nodeType, 'entity') AS nodeType,
               labels(n) AS allLabels, id(n) AS id
        LIMIT $limit`,
@@ -156,6 +161,7 @@ export async function readGraphData(limit = 100) {
 
     const edgesResult = await session.run(
       `MATCH (a)-[r]->(b)
+       WHERE NOT a:Chunk AND NOT b:Chunk
        RETURN id(a) AS source, id(b) AS target, type(r) AS label, r.description AS desc
        LIMIT $limit`,
       { limit: neo4j.int(limit) },
@@ -253,6 +259,126 @@ export async function closeNeo4j() {
     await driver.close();
     driver = null;
   }
+}
+
+// ──────────────────────────────────────────
+// Vector index & Chunk operations
+// ──────────────────────────────────────────
+
+const VECTOR_INDEX_NAME = 'chunk_embedding';
+
+async function ensureVectorIndex(): Promise<void> {
+  await withSession(async (session) => {
+    try {
+      await session.run(
+        `CREATE VECTOR INDEX ${VECTOR_INDEX_NAME} IF NOT EXISTS
+         FOR (c:Chunk) ON c.embedding
+         OPTIONS {indexConfig: {
+           \`vector.dimensions\`: ${EMBEDDING_DIMENSION},
+           \`vector.similarity_function\`: 'cosine'
+         }}`,
+      );
+      console.log(`[Neo4j] Vector index '${VECTOR_INDEX_NAME}' ensured (${EMBEDDING_DIMENSION}d, cosine)`);
+    } catch (err) {
+      console.warn('[Neo4j] Vector index creation warning:', (err as Error).message);
+    }
+  });
+}
+
+export interface ChunkInput {
+  text: string;
+  embedding: number[];
+  position: number;
+  source: string;
+}
+
+export async function storeChunks(chunks: ChunkInput[]): Promise<number> {
+  if (chunks.length === 0) return 0;
+
+  return (await withSession(async (session) => {
+    let stored = 0;
+    for (const chunk of chunks) {
+      try {
+        await session.run(
+          `CREATE (c:Chunk {
+             text: $text,
+             embedding: $embedding,
+             position: $position,
+             source: $source,
+             nodeType: 'chunk',
+             createdAt: datetime()
+           })`,
+          {
+            text: chunk.text,
+            embedding: chunk.embedding,
+            position: neo4j.int(chunk.position),
+            source: chunk.source,
+          },
+        );
+        stored++;
+      } catch (err) {
+        console.warn(`[Neo4j] Failed to store chunk ${chunk.position}:`, (err as Error).message);
+      }
+    }
+    console.log(`[Neo4j] Stored ${stored}/${chunks.length} chunks`);
+    return stored;
+  })) ?? 0;
+}
+
+export async function linkChunksToEntities(entityNames: string[]): Promise<number> {
+  if (entityNames.length === 0) return 0;
+
+  return (await withSession(async (session) => {
+    let linked = 0;
+    for (const entityName of entityNames) {
+      try {
+        const result = await session.run(
+          `MATCH (e:Entity {name: $name}), (c:Chunk)
+           WHERE c.text CONTAINS $name
+           MERGE (e)-[:EXTRACTED_FROM]->(c)
+           RETURN count(*) AS cnt`,
+          { name: entityName },
+        );
+        const cnt = (result.records[0]?.get('cnt') as { toNumber(): number })?.toNumber() ?? 0;
+        if (cnt > 0) linked += cnt;
+      } catch {
+        // non-critical
+      }
+    }
+    console.log(`[Neo4j] Created ${linked} EXTRACTED_FROM links`);
+    return linked;
+  })) ?? 0;
+}
+
+export async function vectorSearch(queryEmbedding: number[], topK = 5): Promise<Array<{ text: string; source: string; position: number; score: number }>> {
+  const results = await withSession(async (session) => {
+    try {
+      const result = await session.run(
+        `CALL db.index.vector.queryNodes($indexName, $topK, $embedding)
+         YIELD node, score
+         RETURN node.text AS text, node.source AS source,
+                node.position AS position, score
+         ORDER BY score DESC`,
+        {
+          indexName: VECTOR_INDEX_NAME,
+          topK: neo4j.int(topK),
+          embedding: queryEmbedding,
+        },
+      );
+      return result.records.map((r) => ({
+        text: r.get('text') as string,
+        source: r.get('source') as string,
+        position: typeof r.get('position') === 'object'
+          ? (r.get('position') as { toNumber(): number }).toNumber()
+          : (r.get('position') as number),
+        score: r.get('score') as number,
+      }));
+    } catch (err) {
+      console.warn('[Neo4j] Vector search failed:', (err as Error).message);
+      return [];
+    }
+  });
+  return results ?? [];
 }
 
 function capitalize(s: string) {

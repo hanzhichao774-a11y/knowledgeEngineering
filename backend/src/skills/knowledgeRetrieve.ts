@@ -1,10 +1,7 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
-import { queryByKeywords, isNeo4jConnected } from '../db/neo4j.js';
+import { queryByKeywords, isNeo4jConnected, vectorSearch } from '../db/neo4j.js';
+import { embedQuery } from '../services/EmbeddingService.js';
 
-/**
- * Extract search keywords from a Chinese question without LLM.
- * Splits on common stop words / punctuation and filters short fragments.
- */
 function extractKeywords(question: string): string[] {
   const stopWords = new Set([
     '的', '了', '吗', '呢', '是', '在', '有', '和', '与', '及', '或',
@@ -52,19 +49,19 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
 
   try {
     const keywords = extractKeywords(question);
-    console.log(`[Skill:knowledgeRetrieve] Local keywords: [${keywords.join(', ')}]`);
+    console.log(`[Skill:knowledgeRetrieve] Keywords: [${keywords.join(', ')}]`);
 
-    let results: Record<string, unknown>[] = [];
-
+    // Channel 1: keyword search on Entity nodes
+    let entityResults: Record<string, unknown>[] = [];
     if (keywords.length > 0) {
       const kwResults = await queryByKeywords(keywords);
       if (kwResults && kwResults.length > 0) {
-        results = kwResults as unknown as Record<string, unknown>[];
-        console.log(`[Skill:knowledgeRetrieve] Found ${results.length} records via keyword search`);
+        entityResults = kwResults as unknown as Record<string, unknown>[];
+        console.log(`[Skill:knowledgeRetrieve] Keyword channel: ${entityResults.length} entities`);
       }
     }
 
-    if (results.length === 0) {
+    if (entityResults.length === 0) {
       const fragments = question.replace(/[？?。，！!,.]/g, '').trim();
       const twoCharKeywords: string[] = [];
       for (let i = 0; i < fragments.length - 1; i++) {
@@ -72,28 +69,49 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
       }
       const uniqueFragments = [...new Set(twoCharKeywords)].slice(0, 10);
       if (uniqueFragments.length > 0) {
-        console.log(`[Skill:knowledgeRetrieve] Fallback sliding-window keywords: [${uniqueFragments.join(', ')}]`);
         const fallbackResults = await queryByKeywords(uniqueFragments);
         if (fallbackResults && fallbackResults.length > 0) {
-          results = fallbackResults as unknown as Record<string, unknown>[];
-          console.log(`[Skill:knowledgeRetrieve] Fallback found ${results.length} records`);
+          entityResults = fallbackResults as unknown as Record<string, unknown>[];
+          console.log(`[Skill:knowledgeRetrieve] Keyword fallback: ${entityResults.length} entities`);
         }
       }
     }
 
+    // Channel 2: vector search on Chunk nodes
+    let chunkResults: Array<{ text: string; source: string; score: number }> = [];
+    let embeddingTokenUsed = 0;
+    try {
+      const queryEmbedding = await embedQuery(question);
+      embeddingTokenUsed = Math.ceil(question.length / 2);
+      const vectorHits = await vectorSearch(queryEmbedding, 5);
+      if (vectorHits.length > 0) {
+        chunkResults = vectorHits.map((h) => ({
+          text: h.text,
+          source: h.source,
+          score: h.score,
+        }));
+        console.log(`[Skill:knowledgeRetrieve] Vector channel: ${chunkResults.length} chunks (top score: ${chunkResults[0].score.toFixed(3)})`);
+      }
+    } catch (vecErr) {
+      console.warn('[Skill:knowledgeRetrieve] Vector search skipped:', (vecErr as Error).message);
+    }
+
+    const totalResults = entityResults.length + chunkResults.length;
     const duration = (Date.now() - startTime) / 1000;
-    console.log(`[Skill:knowledgeRetrieve] Done in ${duration.toFixed(2)}s — ${results.length} results, 0 tokens used`);
+    console.log(`[Skill:knowledgeRetrieve] Done in ${duration.toFixed(2)}s — ${entityResults.length} entities + ${chunkResults.length} chunks`);
+
     return {
       skillName: '知识检索',
       status: 'success',
       data: {
         question,
-        results,
-        resultCount: results.length,
-        source: 'local',
+        entityResults,
+        chunkResults,
+        resultCount: totalResults,
+        source: chunkResults.length > 0 ? 'hybrid' : 'keywords',
         keywords,
       },
-      tokenUsed: 0,
+      tokenUsed: embeddingTokenUsed,
       duration,
     };
   } catch (err) {
