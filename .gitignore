@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+backend/pnpm-lock.yaml
+frontend/pnpm-lock.yaml
 
 # Build output
 dist/
