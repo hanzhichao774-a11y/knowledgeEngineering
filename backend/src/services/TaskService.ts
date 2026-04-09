@@ -56,11 +56,11 @@ export interface TaskResult {
 const tasks = new Map<string, Task>();
 
 const INGEST_STEPS: Step[] = [
-  { name: '文档解析', status: 'pending', skill: '多模态文档解析', skillIcon: '📑', tokenUsed: 0, tokenLimit: 8000 },
-  { name: '本体提取', status: 'pending', skill: '本体提取', skillIcon: '🔍', tokenUsed: 0, tokenLimit: 8000 },
-  { name: 'Schema 构建', status: 'pending', skill: 'Schema 构建', skillIcon: '📊', tokenUsed: 0, tokenLimit: 8000 },
-  { name: '写入图数据库', status: 'pending', skill: '图数据库写入', skillIcon: '💾', tokenUsed: 0, tokenLimit: 8000 },
-  { name: '生成知识图谱', status: 'pending', skill: '知识图谱生成', skillIcon: '🕸️', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '文档规范化', status: 'pending', skill: '文档规范化', skillIcon: '📑', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '知识提取', status: 'pending', skill: '知识提取', skillIcon: '🔍', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '图谱构建', status: 'pending', skill: '图谱构建', skillIcon: '🕸️', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '知识导出', status: 'pending', skill: '知识导出', skillIcon: '📤', tokenUsed: 0, tokenLimit: 8000 },
+  { name: '资产构建', status: 'pending', skill: '资产构建', skillIcon: '📊', tokenUsed: 0, tokenLimit: 8000 },
 ];
 
 const QUERY_STEPS: Step[] = [
@@ -69,11 +69,11 @@ const QUERY_STEPS: Step[] = [
 ];
 
 const SKILL_ICONS: Record<string, string> = {
-  '多模态文档解析': '📑',
-  '本体提取': '🔍',
-  'Schema 构建': '📊',
-  '图数据库写入': '💾',
-  '知识图谱生成': '🕸️',
+  '文档规范化': '📑',
+  '知识提取': '🔍',
+  '图谱构建': '🕸️',
+  '知识导出': '📤',
+  '资产构建': '📊',
   '知识检索': '🔎',
   '答案生成': '💡',
 };
@@ -323,38 +323,31 @@ export class TaskService {
     failedSteps: string[],
     completedSteps: Step[],
   ) {
-    const docResult = ctx.previousResults.find((result) => result.skillName === '多模态文档解析');
-    const ontologyResult = ctx.previousResults.find((result) => result.skillName === '本体提取');
-    const schemaResult = ctx.previousResults.find((result) => result.skillName === 'Schema 构建');
-    const graphResult = ctx.previousResults.find((result) => result.skillName === '知识图谱生成');
+    const normalizeResult = ctx.previousResults.find((result) => result.skillName === '文档规范化');
+    const exportResult = ctx.previousResults.find((result) => result.skillName === '知识导出');
 
-    const ontologyData = ontologyResult?.status === 'success' ? ontologyResult.data as Record<string, unknown> : undefined;
-    const schemaData = schemaResult?.status === 'success' ? schemaResult.data as Record<string, unknown> : undefined;
-    const docData = docResult?.status === 'success' ? docResult.data as Record<string, unknown> : undefined;
-    const graphData = graphResult?.status === 'success' ? graphResult.data as Record<string, unknown> : undefined;
+    const normalizeData = normalizeResult?.status === 'success' ? normalizeResult.data as Record<string, unknown> : undefined;
+    const exportData = exportResult?.status === 'success' ? exportResult.data as Record<string, unknown> : undefined;
 
-    if (graphData?.nodes && graphData?.edges) {
-      storeGraphData(task.id, {
-        nodes: graphData.nodes as Array<{ id: string; label: string; type: string }>,
-        edges: graphData.edges as Array<{ source: string; target: string; label: string }>,
-      });
-    }
+    const neo4jResult = exportData?.neo4j as Record<string, unknown> | undefined;
+    const graphNodeCount = (neo4jResult?.nodes as number) ?? 0;
+    const graphEdgeCount = (neo4jResult?.edges as number) ?? 0;
 
     task.result = {
       ontology: {
-        classes: (ontologyData?.classes as Array<{ name: string; desc: string }>) ?? [],
-        entities: (ontologyData?.entities as Array<{ name: string; class: string; desc: string }>) ?? [],
-        relations: (ontologyData?.relations as Array<{ name: string; source: string; target: string; desc: string }>) ?? [],
-        attributes: (ontologyData?.attributes as Array<{ name: string; entity: string; value: string; desc: string }>) ?? [],
-        classCount: (ontologyData?.classCount as number) ?? 0,
-        entityCount: (ontologyData?.entityCount as number) ?? 0,
-        relationCount: (ontologyData?.relationCount as number) ?? 0,
-        attrCount: (ontologyData?.attrCount as number) ?? 0,
+        classes: [],
+        entities: [],
+        relations: [],
+        attributes: [],
+        classCount: 0,
+        entityCount: 0,
+        relationCount: 0,
+        attrCount: 0,
       },
-      schema: (schemaData?.schema as string) ?? '',
-      summary: buildSummaryWithValidation(docData),
-      graphNodeCount: (graphData?.nodeCount as number) ?? 0,
-      graphEdgeCount: (graphData?.edgeCount as number) ?? 0,
+      schema: '',
+      summary: normalizeData ? `已处理 ${(normalizeData.newFileCount as number) ?? 0} 个文件（${normalizeData.isIncremental ? '增量' : '全量'}模式）` : '',
+      graphNodeCount,
+      graphEdgeCount,
     };
 
     if (hasError) {
@@ -374,33 +367,23 @@ export class TaskService {
       return;
     }
 
-    this.refreshKnowledgeBase(ctx).catch((error) => {
-      console.warn('[TaskService] Graphify refresh failed:', error instanceof Error ? error.message : String(error));
-    });
-
+    const modeLabel = normalizeData?.isIncremental ? '增量更新' : '全量构建';
     broadcast({
       type: 'agent.message',
       message: {
         id: `msg-${Date.now()}`,
         role: 'manager',
         name: '管理智能体',
-        content: `<p>✅ <strong>知识工程任务已完成</strong></p>
+        content: `<p>✅ <strong>知识工程任务已完成（${modeLabel}）</strong></p>
 <p>知识工程数字员工 #KE-01 已完成全部 ${task.steps.length} 个步骤：</p>
-<p>• 文档解析 → 本体提取 → Schema 构建 → 图数据库写入 → 知识图谱生成</p>
-<p>📊 产出：${task.result.ontology.classCount ?? 0} 个本体类、${task.result.ontology.entityCount ?? 0} 个实体、${task.result.ontology.relationCount ?? 0} 条关系</p>
+<p>• 文档规范化 → 知识提取 → 图谱构建 → 知识导出 → 资产构建</p>
+<p>📊 Neo4j：${graphNodeCount} 个节点、${graphEdgeCount} 条关系</p>
 <p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
         timestamp: new Date().toTimeString().slice(0, 5),
       },
     });
   }
 
-  private async refreshKnowledgeBase(ctx: ExecutionContext): Promise<void> {
-    await this.graphifyClient.rebuild({
-      mode: 'full',
-      changedFiles: ctx.filePath ? [ctx.filePath] : [],
-      reason: 'post_ingest_refresh',
-    });
-  }
 }
 
 function buildSummaryWithValidation(docData: Record<string, unknown> | undefined): string {

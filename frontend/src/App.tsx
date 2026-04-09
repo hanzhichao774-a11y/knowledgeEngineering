@@ -7,7 +7,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useTaskStore } from './store/taskStore';
 import { useChatStore } from './store/chatStore';
 import { useResultStore } from './store/resultStore';
-import { getWsUrl, fetchTaskResult, fetchGraphData, fetchKnowledgeStatus, fetchNeo4jGraph } from './services/api';
+import { getWsUrl, fetchTaskResult, fetchGraphData, fetchKnowledgeStatus, fetchNeo4jGraph, fetchGlobalGraph } from './services/api';
 import { useMockFlow } from './hooks/useMockFlow';
 import './styles/global.css';
 
@@ -43,13 +43,26 @@ export default function App() {
 }
 
 async function hydrateFromNeo4j() {
+  const resultStore = useResultStore.getState();
+
+  try {
+    const globalGraph = await fetchGlobalGraph();
+    if (globalGraph && !globalGraph.error && globalGraph.nodes?.length > 0) {
+      const edges = globalGraph.links ?? globalGraph.edges ?? [];
+      resultStore.setGraphData({ ...globalGraph, edges });
+      console.log(`[Hydrate] Loaded ${globalGraph.nodes.length} nodes, ${edges.length} edges from global graph`);
+      return;
+    }
+  } catch {
+    console.log('[Hydrate] No global graph yet, trying Neo4j');
+  }
+
   try {
     const status = await fetchKnowledgeStatus();
     if (!status.connected || status.nodeCount === 0) return;
 
     const graphData = await fetchNeo4jGraph();
     if (graphData && !graphData.error && graphData.nodes?.length > 0) {
-      const resultStore = useResultStore.getState();
       resultStore.setGraphData(graphData);
       console.log(`[Hydrate] Loaded ${graphData.nodes.length} nodes, ${graphData.edges.length} edges from Neo4j`);
     }
@@ -125,11 +138,20 @@ function handleWSEvent(event: Record<string, unknown>) {
         }
       });
 
-      fetchGraphData(taskId).then((graphData) => {
-        if (graphData && !graphData.error) {
-          resultStore.setGraphData(graphData);
-        }
-      });
+      fetchGlobalGraph()
+        .then((globalGraph) => {
+          if (globalGraph && !globalGraph.error && globalGraph.nodes?.length > 0) {
+            const edges = globalGraph.links ?? globalGraph.edges ?? [];
+            resultStore.setGraphData({ ...globalGraph, edges });
+          }
+        })
+        .catch(() => {
+          fetchGraphData(taskId).then((graphData) => {
+            if (graphData && !graphData.error) {
+              resultStore.setGraphData(graphData);
+            }
+          });
+        });
       break;
     }
 

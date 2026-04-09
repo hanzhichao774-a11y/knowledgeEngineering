@@ -417,6 +417,78 @@
   flex-shrink: 0;
 }
 
+/* Markdown Content */
+.markdownContent {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  overflow-x: auto;
+}
+
+.markdownContent h1,
+.markdownContent h2,
+.markdownContent h3,
+.markdownContent h4 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdownContent h1 { font-size: 18px; }
+.markdownContent h2 { font-size: 16px; }
+.markdownContent h3 { font-size: 14px; }
+
+.markdownContent p {
+  margin: 8px 0;
+}
+
+.markdownContent ul,
+.markdownContent ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.markdownContent table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.markdownContent table th,
+.markdownContent table td {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.markdownContent table th {
+  background: var(--surface-elevated);
+  font-weight: 600;
+}
+
+.markdownContent code {
+  background: var(--surface-elevated);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.markdownContent pre {
+  background: var(--surface-elevated);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.markdownContent blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
 /* Empty State */
 .emptyState {
   display: flex;

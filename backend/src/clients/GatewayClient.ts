@@ -61,7 +61,7 @@ export class GatewayClient implements GatewayClientLike {
   constructor(options: { baseUrl?: string; timeoutMs?: number } = {}) {
     const port = Number(process.env.GATEWAY_PORT ?? 3011);
     this.baseUrl = options.baseUrl ?? process.env.GATEWAY_BASE_URL ?? `http://127.0.0.1:${port}`;
-    this.timeoutMs = options.timeoutMs ?? Number(process.env.GATEWAY_TIMEOUT_MS ?? 30_000);
+    this.timeoutMs = options.timeoutMs ?? Number(process.env.GATEWAY_TIMEOUT_MS ?? 180_000);
   }
 
   async classifyIntent(input: {

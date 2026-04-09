@@ -15,6 +15,8 @@ import {
   ANSWER_GENERATE_SYSTEM_PROMPT,
   ANSWER_GENERATE_STRUCTURED_SYSTEM_PROMPT,
   DOCUMENT_PARSE_SUMMARY_SYSTEM_PROMPT,
+  GRAPHIFY_COMMUNITY_LABEL_SYSTEM_PROMPT,
+  GRAPHIFY_SEMANTIC_EXTRACT_SYSTEM_PROMPT,
   INTENT_CLASSIFY_SYSTEM_PROMPT,
   ONTOLOGY_EXTRACT_SYSTEM_PROMPT,
   SCHEMA_BUILD_SYSTEM_PROMPT,
@@ -53,6 +55,8 @@ export const AVAILABLE_GATEWAY_SKILLS = [
   'ontology-extract',
   'schema-build',
   'answer-generate',
+  'graphify-semantic-extract',
+  'graphify-community-label',
 ] as const;
 
 class GatewayRuntimeError extends Error {
@@ -170,6 +174,26 @@ export class OpenAgentGatewayRuntime implements GatewayRuntime {
           usage: answerResult.usage,
           meta: answerResult.meta,
         };
+      }
+      case 'graphify-semantic-extract': {
+        const fileContents = String(input.input.fileContents ?? '');
+        const chunkNum = input.input.chunkNum ?? 1;
+        const totalChunks = input.input.totalChunks ?? 1;
+        result = await this.runText(
+          GRAPHIFY_SEMANTIC_EXTRACT_SYSTEM_PROMPT,
+          `文件组 ${chunkNum}/${totalChunks}\n来源：${String(input.input.sourceFile ?? 'unknown')}\n\n${fileContents.slice(0, 60000)}`,
+        );
+        payload = extractJSON<Record<string, unknown>>(result.text);
+        break;
+      }
+      case 'graphify-community-label': {
+        const communities = input.input.communities ?? [];
+        result = await this.runText(
+          GRAPHIFY_COMMUNITY_LABEL_SYSTEM_PROMPT,
+          JSON.stringify({ communities }, null, 2),
+        );
+        payload = extractJSON<Record<string, unknown>>(result.text);
+        break;
       }
       default:
         throw new GatewayRuntimeError(

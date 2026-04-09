@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -259,6 +260,29 @@ def _find_mineru_cli() -> str | None:
     return None
 
 
+def _find_mineru_md(work_dir: Path) -> Path | None:
+    """Find the main markdown output from MinerU (v3.x names it <stem>.md, older versions use full.md)."""
+    hit = next(work_dir.rglob("full.md"), None)
+    if hit:
+        return hit
+    candidates = sorted(work_dir.rglob("*.md"))
+    for c in candidates:
+        if c.name.startswith(".") or "_origin" in c.name:
+            continue
+        return c
+    return None
+
+
+def _find_mineru_json(work_dir: Path, suffix: str) -> Path | None:
+    """Find a MinerU JSON output by suffix (e.g. 'content_list' or 'middle')."""
+    hit = next(work_dir.rglob(f"{suffix}.json"), None)
+    if hit:
+        return hit
+    for c in sorted(work_dir.rglob(f"*{suffix}*.json")):
+        return c
+    return None
+
+
 def _run_mineru(path: Path, out_dir: Path) -> dict[str, Path] | None:
     mineru = _find_mineru_cli()
     if not mineru:
@@ -267,9 +291,9 @@ def _run_mineru(path: Path, out_dir: Path) -> dict[str, Path] | None:
     work_dir = out_dir / f"{path.stem}_{hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:8]}_mineru"
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    existing_full = next(work_dir.rglob("full.md"), None)
-    existing_content = next(work_dir.rglob("content_list.json"), None)
-    existing_middle = next(work_dir.rglob("middle.json"), None)
+    existing_full = _find_mineru_md(work_dir)
+    existing_content = _find_mineru_json(work_dir, "content_list")
+    existing_middle = _find_mineru_json(work_dir, "middle")
     if existing_full or existing_content or existing_middle:
         return {
             "work_dir": work_dir,
@@ -278,13 +302,15 @@ def _run_mineru(path: Path, out_dir: Path) -> dict[str, Path] | None:
             "middle_json": existing_middle,
         }
 
+    env = {**os.environ, "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")}
     try:
         completed = subprocess.run(
-            [mineru, "-p", str(path), "-o", str(work_dir)],
+            [mineru, "-p", str(path), "-o", str(work_dir), "-b", "pipeline"],
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=1200,
             check=False,
+            env=env,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -294,9 +320,9 @@ def _run_mineru(path: Path, out_dir: Path) -> dict[str, Path] | None:
 
     return {
         "work_dir": work_dir,
-        "full_md": next(work_dir.rglob("full.md"), None),
-        "content_list": next(work_dir.rglob("content_list.json"), None),
-        "middle_json": next(work_dir.rglob("middle.json"), None),
+        "full_md": _find_mineru_md(work_dir),
+        "content_list": _find_mineru_json(work_dir, "content_list"),
+        "middle_json": _find_mineru_json(work_dir, "middle"),
     }
 
 
@@ -348,64 +374,85 @@ def _render_mineru_content_list(path: Path | None) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _html_table_to_markdown(html: str) -> str:
+    """Convert an HTML <table> to a plain-text markdown table for searchability."""
+    rows: list[list[str]] = []
+    for tr_match in re.finditer(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL):
+        cells: list[str] = []
+        for td_match in re.finditer(r"<t[dh][^>]*>(.*?)</t[dh]>", tr_match.group(1), re.DOTALL):
+            cell_text = re.sub(r"<[^>]+>", "", td_match.group(1)).strip()
+            cell_text = re.sub(r"\s+", " ", cell_text)
+            cells.append(cell_text)
+        if cells:
+            rows.append(cells)
+    if not rows:
+        return html
+
+    max_cols = max(len(r) for r in rows)
+    for r in rows:
+        while len(r) < max_cols:
+            r.append("")
+
+    lines: list[str] = []
+    lines.append("| " + " | ".join(rows[0]) + " |")
+    lines.append("| " + " | ".join("---" for _ in rows[0]) + " |")
+    for row in rows[1:]:
+        lines.append("| " + " | ".join(row) + " |")
+    return "\n".join(lines)
+
+
+def _clean_ocr_text(raw_text: str) -> str:
+    """Convert MinerU OCR output: HTML tables → markdown tables, strip dead image links."""
+    cleaned = raw_text
+    for table_match in re.finditer(r"<table[^>]*>.*?</table>", cleaned, re.DOTALL):
+        md_table = _html_table_to_markdown(table_match.group(0))
+        cleaned = cleaned.replace(table_match.group(0), md_table)
+    cleaned = re.sub(r"!\[.*?\]\(images/[^)]+\)\s*", "", cleaned)
+    return cleaned.strip()
+
+
+def _ocr_images_with_mineru(image_paths: list[Path], out_dir: Path) -> dict[str, str]:
+    """Use MinerU to OCR extracted images. Returns {image_filename: cleaned_ocr_text}."""
+    mineru = _find_mineru_cli()
+    if not mineru or not image_paths:
+        return {}
+
+    ocr_results: dict[str, str] = {}
+    image_dir = image_paths[0].parent
+    ocr_out = out_dir / "_mineru_ocr_output"
+
+    env = {**os.environ, "HF_ENDPOINT": os.environ.get("HF_ENDPOINT", "https://hf-mirror.com")}
+    try:
+        completed = subprocess.run(
+            [mineru, "-p", str(image_dir), "-o", str(ocr_out), "-b", "pipeline"],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+            env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ocr_results
+
+    if completed.returncode != 0:
+        return ocr_results
+
+    for img_path in image_paths:
+        md_file = _find_mineru_md(ocr_out / img_path.stem)
+        if not md_file:
+            for candidate in sorted(ocr_out.rglob("*.md")):
+                if img_path.stem in str(candidate):
+                    md_file = candidate
+                    break
+        if md_file:
+            text = _read_utf8(md_file).strip()
+            if text:
+                ocr_results[img_path.name] = _clean_ocr_text(text)
+
+    return ocr_results
+
+
 def convert_pdf_file(path: Path, out_dir: Path) -> tuple[Path | None, list[Path]]:
-    mineru_result = _run_mineru(path, out_dir)
-    if mineru_result:
-        full_markdown = _read_utf8(mineru_result.get("full_md"))
-        content_list_text = _render_mineru_content_list(mineru_result.get("content_list"))
-        middle_json_text = _read_utf8(mineru_result.get("middle_json"))
-        combined_text = "\n\n".join(part for part in (full_markdown, content_list_text) if part.strip())
-        if combined_text.strip():
-            headers, records = _extract_time_series_records(combined_text)
-            summaries = _extract_numbered_summaries(combined_text)
-            out_path = _stable_out_path(path, out_dir)
-            parts = [
-                "---",
-                f'original_source_file: "{_yaml_str(str(path))}"',
-                f'original_filename: "{_yaml_str(path.name)}"',
-                'normalized_from: "mineru"',
-                f'mineru_output_dir: "{_yaml_str(str(mineru_result["work_dir"]))}"',
-                "---",
-                "",
-                f"# Normalized PDF: {path.name}",
-                "",
-                "## MinerU Full Markdown",
-                "",
-                full_markdown.strip(),
-            ]
-
-            if content_list_text:
-                parts.extend(["", "## MinerU Content List", "", content_list_text])
-            if middle_json_text:
-                parts.extend(["", "## MinerU Intermediate JSON", "", "```json", middle_json_text.strip(), "```"])
-            if records:
-                parts.extend(
-                    [
-                        "",
-                        "## Structured Time-Series Records",
-                        "",
-                        _render_markdown_table(
-                            ["时间"] + headers,
-                            [[r.get("时间", "")] + [r.get(h, "") for h in headers] for r in records],
-                        ),
-                        "",
-                        "## Record Details",
-                        "",
-                        _render_record_bullets(records),
-                    ]
-                )
-                numeric_summary = _summarize_numeric_records(records, exclude={"时间", "row_raw"})
-                if numeric_summary:
-                    parts.extend(["", "## Derived Numeric Summaries", ""] + numeric_summary)
-
-            if summaries:
-                parts.extend(["", "## Numbered Summary Items", ""])
-                for key, value in summaries:
-                    parts.append(f"- {key}: {value}")
-
-            out_path.write_text("\n".join(parts).strip() + "\n", encoding="utf-8")
-            return out_path, []
-
     page_texts = _extract_pdf_page_texts(path)
     text = "\n".join(page for page in page_texts if page)
     textless_pages = {idx for idx, page_text in enumerate(page_texts, start=1) if not page_text.strip()}
@@ -414,15 +461,18 @@ def convert_pdf_file(path: Path, out_dir: Path) -> tuple[Path | None, list[Path]
     if not text.strip() and not page_images:
         return None, []
 
+    ocr_texts = _ocr_images_with_mineru(page_images, out_dir) if page_images else {}
+
     headers, records = _extract_time_series_records(text)
     summaries = _extract_numbered_summaries(text)
     out_path = _stable_out_path(path, out_dir)
 
+    norm_method = "pdf+mineru-ocr" if ocr_texts else "pdf"
     parts = [
         "---",
         f'original_source_file: "{_yaml_str(str(path))}"',
         f'original_filename: "{_yaml_str(path.name)}"',
-        'normalized_from: "pdf"',
+        f'normalized_from: "{norm_method}"',
         "---",
         "",
         f"# Normalized PDF: {path.name}",
@@ -458,12 +508,16 @@ def convert_pdf_file(path: Path, out_dir: Path) -> tuple[Path | None, list[Path]
         parts.extend(["", "## Extracted Page Images", ""])
         for image_path in page_images:
             match = re.search(r"_page(\d+)_img(\d+)", image_path.stem)
-            if match:
-                page_no = int(match.group(1))
-                image_no = int(match.group(2))
-                parts.append(f"- page {page_no}: image {image_no} -> {image_path.name}")
+            page_label = f"page {match.group(1)}: image {match.group(2)}" if match else image_path.name
+
+            ocr_text = ocr_texts.get(image_path.name, "")
+            if ocr_text:
+                parts.append(f"### {page_label} (OCR)")
+                parts.append("")
+                parts.append(ocr_text)
+                parts.append("")
             else:
-                parts.append(f"- {image_path.name}")
+                parts.append(f"- {page_label} -> {image_path.name}")
 
     out_path.write_text("\n".join(parts).strip() + "\n", encoding="utf-8")
     return out_path, page_images

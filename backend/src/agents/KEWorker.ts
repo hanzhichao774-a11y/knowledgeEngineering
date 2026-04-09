@@ -1,18 +1,18 @@
 import type { AgentConfig, ExecutionContext, SkillResult } from './types.js';
-import { documentParseSkill } from '../skills/documentParse.js';
-import { ontologyExtractSkill } from '../skills/ontologyExtract.js';
-import { schemaBuildSkill } from '../skills/schemaBuild.js';
-import { graphDBWriteSkill } from '../skills/graphDBWrite.js';
-import { graphGenerateSkill } from '../skills/graphGenerate.js';
+import { graphifyNormalizeSkill } from '../skills/graphifyNormalize.js';
+import { graphifyExtractSkill } from '../skills/graphifyExtract.js';
+import { graphifyBuildSkill } from '../skills/graphifyBuild.js';
+import { graphifyExportSkill } from '../skills/graphifyExport.js';
+import { graphifyAssetsSkill } from '../skills/graphifyAssets.js';
 
 export type SkillFn = (ctx: ExecutionContext) => Promise<SkillResult>;
 
 const SKILL_PIPELINE: Array<{ name: string; fn: SkillFn }> = [
-  { name: '文档解析', fn: documentParseSkill },
-  { name: '本体提取', fn: ontologyExtractSkill },
-  { name: 'Schema 构建', fn: schemaBuildSkill },
-  { name: '写入图数据库', fn: graphDBWriteSkill },
-  { name: '生成知识图谱', fn: graphGenerateSkill },
+  { name: '文档规范化', fn: graphifyNormalizeSkill },
+  { name: '知识提取', fn: graphifyExtractSkill },
+  { name: '图谱构建', fn: graphifyBuildSkill },
+  { name: '知识导出', fn: graphifyExportSkill },
+  { name: '资产构建', fn: graphifyAssetsSkill },
 ];
 
 export class KEWorker {
@@ -20,8 +20,8 @@ export class KEWorker {
     id: 'KE-01',
     name: '知识工程数字员工 #KE-01',
     role: 'worker',
-    description: '知识工程工作线 · 实例 01，负责文档解析、本体提取、Schema 构建、图数据库写入和知识图谱生成',
-    skills: ['document-parse', 'ontology-extract', 'schema-build', 'graph-db-write', 'graph-generate'],
+    description: '知识工程工作线 · 实例 01，负责文档规范化、知识提取（AST+语义）、图谱构建、知识导出和资产构建',
+    skills: ['graphify-normalize', 'graphify-extract', 'graphify-build', 'graphify-export', 'graphify-assets'],
     model: 'minimax',
   };
 

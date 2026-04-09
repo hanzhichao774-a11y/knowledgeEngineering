@@ -100,17 +100,41 @@ export interface GraphNode {
   id: string;
   label: string;
   type: string;
+  community?: number;
+  confidence?: number;
+  source_file?: string;
+  description?: string;
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
   label: string;
+  weight?: number;
+  evidence?: string;
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  links?: GraphEdge[];
+  directed?: boolean;
+  multigraph?: boolean;
+}
+
+export interface GraphifyCommunity {
+  id: string;
+  label: string;
+  members: string[];
+  cohesion: number;
+}
+
+export interface GraphReport {
+  content: string | null;
+}
+
+export interface HealthReport {
+  content: string | null;
 }
 
 export interface SkillInfo {

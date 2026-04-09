@@ -1,37 +1,45 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { useResultStore } from '../../store/resultStore';
 import styles from './RightPanel.module.css';
 
-const nodeColors: Record<string, string> = {
-  class: '#f59e0b',
+const COMMUNITY_PALETTE = [
+  '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#a855f7',
+  '#84cc16', '#e11d48', '#0ea5e9', '#d946ef', '#facc15',
+];
+
+const TYPE_COLORS: Record<string, string> = {
   entity: '#3b82f6',
   concept: '#22c55e',
-  attribute: '#6366f1',
-  rule: '#a855f7',
+  event: '#f59e0b',
+  metric: '#06b6d4',
+  organization: '#8b5cf6',
+  person: '#ec4899',
+  location: '#14b8a6',
+  time: '#f97316',
+  document: '#64748b',
 };
 
-const nodeBg: Record<string, string> = {
-  class: 'rgba(245,158,11,0.15)',
-  entity: 'rgba(59,130,246,0.12)',
-  concept: 'rgba(34,197,94,0.12)',
-  attribute: 'rgba(99,102,241,0.12)',
-  rule: 'rgba(168,85,247,0.12)',
-};
+function getNodeColor(node: { community?: number; type?: string }): string {
+  if (node.community !== undefined && node.community >= 0) {
+    return COMMUNITY_PALETTE[node.community % COMMUNITY_PALETTE.length];
+  }
+  return TYPE_COLORS[node.type ?? 'entity'] ?? TYPE_COLORS.entity;
+}
 
-const legendItems = [
-  { type: 'class', label: '本体类' },
-  { type: 'entity', label: '实体' },
-  { type: 'attribute', label: '属性' },
-];
+function getNodeAlpha(confidence?: number): number {
+  if (confidence === undefined) return 1;
+  return Math.max(0.4, confidence);
+}
 
 interface GraphRendererProps {
   width: number;
   height: number;
   chargeStrength?: number;
   linkDistance?: number;
-  nodes: { id: string; label: string; type: string }[];
-  links: { source: string; target: string; label?: string }[];
+  nodes: Array<{ id: string; label: string; type: string; community?: number; confidence?: number }>;
+  links: Array<{ source: string; target: string; label?: string; weight?: number }>;
 }
 
 function GraphRenderer({
@@ -59,8 +67,7 @@ function GraphRenderer({
   const handleZoomIn = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    const { k, x, y } = fg.zoom();
-    fg.zoom(k * 1.4, 300);
+    fg.zoom(fg.zoom().k * 1.4, 300);
   }, []);
 
   const handleZoomOut = useCallback(() => {
@@ -76,33 +83,31 @@ function GraphRenderer({
   const nodeCanvasObject = useCallback(
     (node: any, ctx: CanvasRenderingContext2D) => {
       const label = node.label as string;
-      const type = (node.type as string) || 'entity';
-      const isClass = type === 'class';
-      const fontSize = isClass ? 13 : 12;
-      ctx.font = `${isClass ? 'bold ' : ''}${fontSize}px -apple-system, sans-serif`;
+      const color = getNodeColor(node);
+      const alpha = getNodeAlpha(node.confidence);
+      const fontSize = 12;
+      ctx.font = `${fontSize}px -apple-system, sans-serif`;
       const textWidth = ctx.measureText(label).width;
-      const padding = isClass ? 12 : 10;
+      const padding = 10;
       const w = textWidth + padding * 2;
       const h = fontSize + padding * 1.5;
       const x = node.x! - w / 2;
       const y = node.y! - h / 2;
 
-      ctx.fillStyle = nodeBg[type] ?? nodeBg.entity;
-      ctx.strokeStyle = nodeColors[type] ?? nodeColors.entity;
-      ctx.lineWidth = isClass ? 2.5 : 1.5;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color + '20';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = node.confidence !== undefined && node.confidence < 0.7 ? 1 : 1.5;
       ctx.beginPath();
-      if (isClass) {
-        ctx.ellipse(node.x!, node.y!, w / 2, h / 2, 0, 0, Math.PI * 2);
-      } else {
-        ctx.roundRect(x, y, w, h, 5);
-      }
+      ctx.roundRect(x, y, w, h, 5);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = nodeColors[type] ?? nodeColors.entity;
+      ctx.fillStyle = color;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(label, node.x!, node.y!);
+      ctx.globalAlpha = 1;
     },
     [],
   );
@@ -120,8 +125,9 @@ function GraphRenderer({
       const ux = dx / len;
       const uy = dy / len;
 
-      ctx.strokeStyle = 'rgba(148,163,184,0.5)';
-      ctx.lineWidth = 1.2;
+      const lineAlpha = Math.min(1, (link.weight ?? 0.5) + 0.3);
+      ctx.strokeStyle = `rgba(148,163,184,${lineAlpha * 0.5})`;
+      ctx.lineWidth = 1 + (link.weight ?? 0.5);
       ctx.beginPath();
       ctx.moveTo(start.x, start.y);
       ctx.lineTo(end.x, end.y);
@@ -130,7 +136,7 @@ function GraphRenderer({
       const arrowLen = 7;
       const arrowX = end.x - ux * 14;
       const arrowY = end.y - uy * 14;
-      ctx.fillStyle = 'rgba(148,163,184,0.7)';
+      ctx.fillStyle = `rgba(148,163,184,${lineAlpha * 0.7})`;
       ctx.beginPath();
       ctx.moveTo(arrowX + ux * arrowLen, arrowY + uy * arrowLen);
       ctx.lineTo(arrowX - uy * 3.5, arrowY + ux * 3.5);
@@ -171,27 +177,9 @@ function GraphRenderer({
   return (
     <div className={styles.graphRendererWrap}>
       <div className={styles.graphToolbar}>
-        <button
-          className={styles.graphToolBtn}
-          onClick={handleZoomIn}
-          title="放大"
-        >
-          +
-        </button>
-        <button
-          className={styles.graphToolBtn}
-          onClick={handleZoomOut}
-          title="缩小"
-        >
-          −
-        </button>
-        <button
-          className={styles.graphToolBtn}
-          onClick={handleZoomReset}
-          title="适应画布"
-        >
-          ⟲
-        </button>
+        <button className={styles.graphToolBtn} onClick={handleZoomIn} title="放大">+</button>
+        <button className={styles.graphToolBtn} onClick={handleZoomOut} title="缩小">−</button>
+        <button className={styles.graphToolBtn} onClick={handleZoomReset} title="适应画布">⟲</button>
       </div>
       <ForceGraph2D
         ref={fgRef}
@@ -215,10 +203,12 @@ function GraphRenderer({
 function GraphModal({
   nodes,
   links,
+  communityLegend,
   onClose,
 }: {
-  nodes: { id: string; label: string; type: string }[];
-  links: { source: string; target: string; label?: string }[];
+  nodes: GraphRendererProps['nodes'];
+  links: GraphRendererProps['links'];
+  communityLegend: Array<{ id: number; label: string; color: string }>;
   onClose: () => void;
 }) {
   const [dims, setDims] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -239,29 +229,17 @@ function GraphModal({
 
   return (
     <div className={styles.graphOverlay} onClick={onClose}>
-      <div
-        className={styles.graphModalContent}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.graphModalContent} onClick={(e) => e.stopPropagation()}>
         <div className={styles.graphModalHeader}>
           <div className={styles.graphLegend} style={{ border: 'none', padding: '0' }}>
-            {legendItems.map((item) => (
-              <span key={item.type} className={styles.legendItem}>
-                <span
-                  className={styles.legendDot}
-                  style={{ background: nodeColors[item.type] }}
-                />
+            {communityLegend.map((item) => (
+              <span key={item.id} className={styles.legendItem}>
+                <span className={styles.legendDot} style={{ background: item.color }} />
                 {item.label}
               </span>
             ))}
           </div>
-          <button
-            className={styles.graphModalClose}
-            onClick={onClose}
-            title="关闭 (Esc)"
-          >
-            ✕
-          </button>
+          <button className={styles.graphModalClose} onClick={onClose} title="关闭 (Esc)">✕</button>
         </div>
         <GraphRenderer
           width={dims.width - 48}
@@ -297,12 +275,47 @@ export function GraphTab() {
     return () => ro.disconnect();
   }, []);
 
-  const fgNodes = graphData
-    ? graphData.nodes.map((n) => ({ id: n.id, label: n.label, type: n.type }))
-    : [];
-  const fgLinks = graphData
-    ? graphData.edges.map((e) => ({ source: e.source, target: e.target, label: e.label }))
-    : [];
+  const fgNodes = useMemo(() => {
+    if (!graphData) return [];
+    return graphData.nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      type: n.type,
+      community: n.community,
+      confidence: n.confidence,
+    }));
+  }, [graphData]);
+
+  const fgLinks = useMemo(() => {
+    if (!graphData) return [];
+    const edges = graphData.links ?? graphData.edges ?? [];
+    return edges.map((e) => ({
+      source: e.source,
+      target: e.target,
+      label: e.label,
+      weight: e.weight,
+    }));
+  }, [graphData]);
+
+  const communityLegend = useMemo(() => {
+    if (!graphData) return [];
+    const communities = new Map<number, string[]>();
+    for (const node of graphData.nodes) {
+      if (node.community !== undefined && node.community >= 0) {
+        const members = communities.get(node.community) ?? [];
+        members.push(node.label);
+        communities.set(node.community, members);
+      }
+    }
+    return Array.from(communities.entries())
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 10)
+      .map(([id, members]) => ({
+        id,
+        label: `C${id} (${members.length})`,
+        color: COMMUNITY_PALETTE[id % COMMUNITY_PALETTE.length],
+      }));
+  }, [graphData]);
 
   if (!graphData) {
     return (
@@ -320,7 +333,7 @@ export function GraphTab() {
           <span className={styles.resultIcon}>🕸️</span>
           <span className={styles.resultTitle}>知识图谱预览</span>
           <span className={`${styles.resultBadge} ${styles.badgeSuccess}`}>
-            {graphData.nodes.length} 节点 · {graphData.edges.length} 边
+            {graphData.nodes.length} 节点 · {(graphData.links ?? graphData.edges ?? []).length} 边
           </span>
           <button
             className={styles.graphFullscreenBtn}
@@ -331,17 +344,16 @@ export function GraphTab() {
           </button>
         </div>
         <div className={styles.resultCardBody} style={{ padding: 0 }}>
-          <div className={styles.graphLegend}>
-            {legendItems.map((item) => (
-              <span key={item.type} className={styles.legendItem}>
-                <span
-                  className={styles.legendDot}
-                  style={{ background: nodeColors[item.type] }}
-                />
-                {item.label}
-              </span>
-            ))}
-          </div>
+          {communityLegend.length > 0 && (
+            <div className={styles.graphLegend}>
+              {communityLegend.map((item) => (
+                <span key={item.id} className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: item.color }} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          )}
           <div ref={containerRef} className={styles.graphContainer}>
             <GraphRenderer
               width={dims.width}
@@ -357,6 +369,7 @@ export function GraphTab() {
         <GraphModal
           nodes={fgNodes}
           links={fgLinks}
+          communityLegend={communityLegend}
           onClose={() => setIsFullscreen(false)}
         />
       )}

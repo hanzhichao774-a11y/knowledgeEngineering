@@ -3,6 +3,12 @@ node_modules/
 backend/pnpm-lock.yaml
 frontend/pnpm-lock.yaml
 
+# Python virtual environment
+.venv/
+
+# Graphify workspace (runtime data)
+graphify-workspace/
+
 # Build output
 dist/
 build/

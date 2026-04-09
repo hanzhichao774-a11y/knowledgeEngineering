@@ -48,11 +48,31 @@ export async function sendChat(taskId: string, content: string) {
 
 export async function fetchKnowledgeStatus() {
   const { data } = await api.get('/knowledge/status');
-  return data as { connected: boolean; nodeCount: number; edgeCount: number };
+  return data as { connected: boolean; hasGraph?: boolean; nodeCount: number; edgeCount: number };
 }
 
 export async function fetchNeo4jGraph() {
   const { data } = await api.get('/graph/neo4j/all');
+  return data;
+}
+
+export async function fetchGlobalGraph() {
+  const { data } = await api.get('/graph/global');
+  return data;
+}
+
+export async function fetchGraphReport() {
+  const { data } = await api.get('/graph/report');
+  return data as { content: string | null };
+}
+
+export async function fetchHealthReport() {
+  const { data } = await api.get('/graph/health-report');
+  return data as { content: string | null };
+}
+
+export async function resetNeo4j() {
+  const { data } = await api.post('/neo4j/reset');
   return data;
 }
 

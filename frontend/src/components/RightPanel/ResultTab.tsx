@@ -1,9 +1,35 @@
+import { useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useResultStore } from '../../store/resultStore';
+import { fetchGraphReport, fetchHealthReport } from '../../services/api';
 import styles from './RightPanel.module.css';
 
 export function ResultTab() {
   const { ontologyResult, schemaContent, schemaStatus, schemaProgress, documentSummary } =
     useResultStore();
+  const graphData = useResultStore((s) => s.graphData);
+
+  const [graphReport, setGraphReport] = useState<string | null>(null);
+  const [healthReport, setHealthReport] = useState<string | null>(null);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  useEffect(() => {
+    if (!graphData) return;
+    let cancelled = false;
+    setLoadingReports(true);
+    Promise.all([fetchGraphReport(), fetchHealthReport()])
+      .then(([gr, hr]) => {
+        if (cancelled) return;
+        setGraphReport(gr.content);
+        setHealthReport(hr.content);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingReports(false);
+      });
+    return () => { cancelled = true; };
+  }, [graphData]);
 
   const classes = ontologyResult?.classes ?? [];
   const entities = ontologyResult?.entities ?? [];
@@ -12,6 +38,45 @@ export function ResultTab() {
 
   return (
     <div>
+      {graphReport && (
+        <div className={styles.resultCard}>
+          <div className={styles.resultCardHeader}>
+            <span className={styles.resultIcon}>📊</span>
+            <span className={styles.resultTitle}>图谱分析报告</span>
+            <span className={`${styles.resultBadge} ${styles.badgeSuccess}`}>GRAPH_REPORT</span>
+          </div>
+          <div className={styles.resultCardBody}>
+            <div className={styles.markdownContent}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{graphReport}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {healthReport && (
+        <div className={styles.resultCard}>
+          <div className={styles.resultCardHeader}>
+            <span className={styles.resultIcon}>🏥</span>
+            <span className={styles.resultTitle}>健康报告</span>
+            <span className={`${styles.resultBadge} ${styles.badgeSuccess}`}>HEALTH_REPORT</span>
+          </div>
+          <div className={styles.resultCardBody}>
+            <div className={styles.markdownContent}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{healthReport}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loadingReports && graphData && !graphReport && (
+        <div className={styles.resultCard}>
+          <div className={styles.resultCardHeader}>
+            <span className={styles.resultIcon}>⏳</span>
+            <span className={styles.resultTitle}>加载报告中...</span>
+          </div>
+        </div>
+      )}
+
       {hasOntology && (
         <div className={styles.resultCard}>
           <div className={styles.resultCardHeader}>
@@ -112,7 +177,7 @@ export function ResultTab() {
         </div>
       )}
 
-      {!hasOntology && !schemaContent && !documentSummary && (
+      {!hasOntology && !schemaContent && !documentSummary && !graphReport && !healthReport && (
         <div className={styles.emptyState}>
           <p>暂无产出结果</p>
           <p className={styles.emptyHint}>上传文档并启动任务后，结果将在此展示</p>

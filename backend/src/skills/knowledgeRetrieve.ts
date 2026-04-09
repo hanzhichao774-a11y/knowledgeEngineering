@@ -1,6 +1,10 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
 import { queryByKeywords, isNeo4jConnected, vectorSearch } from '../db/neo4j.js';
-import { embedQuery } from '../services/EmbeddingService.js';
+import { getGraphifyBridge } from '../services/GraphifyBridge.js';
+import { getWorkspaceManager } from '../services/WorkspaceManager.js';
+import type { DocSnippet } from '../services/GraphifyBridge.js';
+
+const bridge = getGraphifyBridge();
 
 function extractKeywords(question: string): string[] {
   const stopWords = new Set([
@@ -36,49 +40,48 @@ function extractKeywords(question: string): string[] {
 export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<SkillResult> {
   const startTime = Date.now();
   const question = ctx.query ?? '';
+  const ws = getWorkspaceManager();
 
   try {
-    const graphifySnapshot = await ctx.services.graphify.getSnapshotStatus().catch(() => ({
-      ok: false,
-      exists: false,
-      snapshotId: null,
-      assetRoot: '',
-      nodeCount: 0,
-      edgeCount: 0,
-      recordCount: 0,
-      freshness: { status: 'missing' as const },
-    }));
+    if (ws.hasExistingGraph()) {
+      const docSnippets = bridge.searchConvertedDocs(question, ws.workspacePath, 8);
 
-    if (graphifySnapshot.exists) {
-      try {
-        const [graphifyAsk, graphifyRecords] = await Promise.all([
-          ctx.services.graphify.ask({ question, format: 'structured', topN: 5 }),
-          ctx.services.graphify.searchRecords({ query: question, topN: 10 }),
-        ]);
+      const [askResult, recordsResult] = await Promise.allSettled([
+        bridge.ask(question, ws.workspacePath, 5),
+        bridge.searchRecords(question, ws.workspacePath, 10),
+      ]);
 
-        const graphifyAnswer = normalizeStructuredGraphifyAnswer(graphifyAsk.answer);
-        const resultCount = graphifyAnswer.records.length + graphifyAnswer.nodes.length + graphifyRecords.records.length;
+      const graphAnswer = askResult.status === 'fulfilled' ? askResult.value : '';
+      const recordResults = recordsResult.status === 'fulfilled' ? recordsResult.value : [];
 
-        return {
-          skillName: '知识检索',
-          status: 'success',
-          data: {
-            question,
-            resultCount,
-            source: 'graphify',
-            graphifyAnswer,
-            recordResults: graphifyRecords.records,
-            graphifySources: graphifyAnswer.sources,
-            snapshotId: graphifyAsk.snapshotId ?? graphifySnapshot.snapshotId,
-            freshness: graphifyAsk.freshness ?? graphifySnapshot.freshness,
-            fallbackUsed: false,
-          },
-          tokenUsed: 0,
-          duration: (Date.now() - startTime) / 1000,
-        };
-      } catch (graphifyError) {
-        console.warn('[Skill:knowledgeRetrieve] Graphify query failed, falling back to Neo4j:', (graphifyError as Error).message);
+      if (askResult.status === 'rejected') {
+        console.warn('[knowledgeRetrieve] bridge.ask failed:', (askResult.reason as Error).message);
       }
+      if (recordsResult.status === 'rejected') {
+        console.warn('[knowledgeRetrieve] bridge.searchRecords failed:', (recordsResult.reason as Error).message);
+      }
+
+      const resultCount = recordResults.length + docSnippets.length + (graphAnswer ? 1 : 0);
+
+      return {
+        skillName: '知识检索',
+        status: 'success',
+        data: {
+          question,
+          resultCount,
+          source: 'graphify-local',
+          graphifyAnswer: graphAnswer,
+          recordResults,
+          docSnippets,
+          graphifySources: [
+            ...recordResults.map((r) => String(r.source_file ?? '')).filter(Boolean),
+            ...docSnippets.map((s) => s.file).filter(Boolean),
+          ],
+          fallbackUsed: false,
+        },
+        tokenUsed: 0,
+        duration: (Date.now() - startTime) / 1000,
+      };
     }
 
     if (!isNeo4jConnected()) {
@@ -92,8 +95,6 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
           entityResults: [],
           chunkResults: [],
           keywords: [],
-          snapshotId: graphifySnapshot.snapshotId,
-          freshness: graphifySnapshot.freshness,
           fallbackUsed: false,
         },
         tokenUsed: 0,
@@ -102,14 +103,12 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
     }
 
     const keywords = extractKeywords(question);
-    console.log(`[Skill:knowledgeRetrieve] Keywords: [${keywords.join(', ')}]`);
 
     let entityResults: Record<string, unknown>[] = [];
     if (keywords.length > 0) {
       const keywordResults = await queryByKeywords(keywords);
       if (keywordResults && keywordResults.length > 0) {
         entityResults = keywordResults as unknown as Record<string, unknown>[];
-        console.log(`[Skill:knowledgeRetrieve] Keyword channel: ${entityResults.length} entities`);
       }
     }
 
@@ -124,16 +123,14 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
         const fallbackResults = await queryByKeywords(uniqueFragments);
         if (fallbackResults && fallbackResults.length > 0) {
           entityResults = fallbackResults as unknown as Record<string, unknown>[];
-          console.log(`[Skill:knowledgeRetrieve] Keyword fallback: ${entityResults.length} entities`);
         }
       }
     }
 
     let chunkResults: Array<{ text: string; source: string; score: number }> = [];
-    let embeddingTokenUsed = 0;
     try {
+      const { embedQuery } = await import('../services/EmbeddingService.js');
       const queryEmbedding = await embedQuery(question);
-      embeddingTokenUsed = Math.ceil(question.length / 2);
       const vectorHits = await vectorSearch(queryEmbedding, 5);
       if (vectorHits.length > 0) {
         chunkResults = vectorHits.map((hit) => ({
@@ -141,15 +138,12 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
           source: hit.source,
           score: hit.score,
         }));
-        console.log(`[Skill:knowledgeRetrieve] Vector channel: ${chunkResults.length} chunks (top score: ${chunkResults[0].score.toFixed(3)})`);
       }
     } catch (vectorError) {
-      console.warn('[Skill:knowledgeRetrieve] Vector search skipped:', (vectorError as Error).message);
+      console.warn('[knowledgeRetrieve] Vector search skipped:', (vectorError as Error).message);
     }
 
     const resultCount = entityResults.length + chunkResults.length;
-    const duration = (Date.now() - startTime) / 1000;
-    console.log(`[Skill:knowledgeRetrieve] Done in ${duration.toFixed(2)}s — ${entityResults.length} entities + ${chunkResults.length} chunks`);
 
     return {
       skillName: '知识检索',
@@ -161,15 +155,13 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
         resultCount,
         source: chunkResults.length > 0 ? 'neo4j-hybrid' : 'neo4j-keywords',
         keywords,
-        snapshotId: graphifySnapshot.snapshotId,
-        freshness: graphifySnapshot.freshness,
         fallbackUsed: true,
       },
-      tokenUsed: embeddingTokenUsed,
-      duration,
+      tokenUsed: 0,
+      duration: (Date.now() - startTime) / 1000,
     };
   } catch (err) {
-    console.error('[Skill:knowledgeRetrieve] Failed:', (err as Error).message);
+    console.error('[knowledgeRetrieve] Failed:', (err as Error).message);
     return {
       skillName: '知识检索',
       status: 'error',
@@ -178,28 +170,4 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
       duration: (Date.now() - startTime) / 1000,
     };
   }
-}
-
-function normalizeStructuredGraphifyAnswer(answer: unknown): {
-  question: string;
-  records: Array<Record<string, unknown>>;
-  nodes: Array<Record<string, unknown>>;
-  sources: string[];
-} {
-  if (!answer || typeof answer !== 'object') {
-    return {
-      question: '',
-      records: [],
-      nodes: [],
-      sources: [],
-    };
-  }
-
-  const payload = answer as Record<string, unknown>;
-  return {
-    question: String(payload.question ?? ''),
-    records: Array.isArray(payload.records) ? payload.records as Array<Record<string, unknown>> : [],
-    nodes: Array.isArray(payload.nodes) ? payload.nodes as Array<Record<string, unknown>> : [],
-    sources: Array.isArray(payload.sources) ? payload.sources.filter((item): item is string => typeof item === 'string') : [],
-  };
 }
