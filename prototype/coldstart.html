@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeatGraph AI - 冷启动向导</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </div>
+        <div class="brand-block">
+          <div class="brand-mark">H</div>
+          <div><h1>HeatGraph AI</h1><p>供热运营智能工作台</p></div>
+        </div>
+        <a class="primary-ghost" href="./warroom.html"><span>+</span>新建任务</a>
+        <nav class="nav-group">
+          <p class="nav-caption">Workspace</p>
+          <a class="nav-item" href="./index.html">工作台首页</a>
+          <a class="nav-item active" href="./coldstart.html">冷启动向导</a>
+          <a class="nav-item" href="./graph.html">数据与图谱中心</a>
+          <a class="nav-item" href="./warroom.html">项目作战室</a>
+          <a class="nav-item" href="./governance.html">管理驾驶舱</a>
+          <a class="nav-item" href="./agents.html">Agent / Skill</a>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="user-avatar">S</div>
+          <div><strong>samhar</strong><p>产品负责人</p></div>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Onboarding</p>
+            <h2>冷启动向导</h2>
+            <p class="page-description">先确定业务边界，再自动生成数据模型、场景配置清单和基础 Agent 组合。</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="segmented-control">
+              <span class="segment active">向导</span>
+              <span class="segment">激活结果</span>
+              <span class="segment">接入日志</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="content-shell">
+          <div class="view">
+            <div class="wizard-layout">
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>为什么系统先问这些问题</h3>
+                    <p>先确定业务边界，再决定后面的数据模型、图谱类型和 Agent 组合。</p>
+                  </div>
+                  <span class="pill is-blue">Q1-Q4</span>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item"><strong>Q1 行业场景</strong><p>默认是城市集中供热，但保留行业扩展能力，方便后续复制到其他 B 端场景。</p></div>
+                  <div class="list-item"><strong>Q2 业务重点</strong><p>比如换热站调控、接诉即办、漏损检测。这个选择直接影响激活哪些专业 Agent。</p></div>
+                  <div class="list-item"><strong>Q3 资产规模</strong><p>站点数量、覆盖区域、核心设备，是项目图谱和治理复杂度的关键输入。</p></div>
+                  <div class="list-item"><strong>Q4 可接入数据</strong><p>时序表、规程文档、维修日志、工单系统决定第一版 Demo 的分析能力边界。</p></div>
+                </div>
+              </section>
+
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>冷启动配置</h3>
+                    <p>页面结构保持轻量，但逻辑上是业务编译器，而不是普通问卷。</p>
+                  </div>
+                  <a class="button" href="./graph.html">生成图谱底座</a>
+                </div>
+
+                <div class="field-group">
+                  <div class="input-card">
+                    <label>行业场景</label>
+                    <div class="option-row">
+                      <span class="option-pill selected">城市集中供热</span>
+                      <span class="option-pill">工业园区热网</span>
+                      <span class="option-pill">热源厂联调</span>
+                    </div>
+                  </div>
+                  <div class="input-card">
+                    <label>业务重点</label>
+                    <div class="option-row">
+                      <span class="option-pill selected">换热站异常诊断</span>
+                      <span class="option-pill selected">负荷预测</span>
+                      <span class="option-pill">接诉即办协同</span>
+                      <span class="option-pill">管网漏损检测</span>
+                    </div>
+                  </div>
+                  <div class="input-card">
+                    <label>资产规模</label>
+                    <div class="pill-row">
+                      <span class="pill">换热站 48</span>
+                      <span class="pill">热源厂 3</span>
+                      <span class="pill">监测点 1264</span>
+                      <span class="pill">服务面积 820 万平米</span>
+                    </div>
+                  </div>
+                  <div class="upload-area">
+                    <strong>数据源上传</strong>
+                    <p class="subtle">支持时序数据、PDF 规程、TXT 维修日志、资产台账、工单导出文件。</p>
+                    <div class="upload-list">
+                      <div class="list-item"><strong>station_timeseries_apr.csv</strong><p>识别为温度 / 压力 / 流量时序表，待映射 7 个关键字段。</p></div>
+                      <div class="list-item"><strong>供热运行规程.pdf</strong><p>已切片 86 段知识单元，待绑定设备与规则节点。</p></div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

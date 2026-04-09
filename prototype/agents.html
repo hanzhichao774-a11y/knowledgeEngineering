@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeatGraph AI - Agent / Skill</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
+        </div>
+        <div class="brand-block"><div class="brand-mark">H</div><div><h1>HeatGraph AI</h1><p>供热运营智能工作台</p></div></div>
+        <a class="primary-ghost" href="./projects/chaoyang.html"><span>+</span>新建任务</a>
+        <nav class="nav-group">
+          <p class="nav-caption">Workspace</p>
+          <a class="nav-item" href="./index.html">首页（manager agent）</a>
+          <a class="nav-item" href="./graph.html">数据中心（知识工程agent）</a>
+          <a class="nav-item" href="./project-management.html">项目管理（manager agent）</a>
+          <div class="nav-subtree">
+            <a class="nav-subitem" href="./projects/chaoyang.html">朝阳区智慧供热改造（project agent）</a>
+            <a class="nav-subitem" href="./projects/haidian.html">海淀热源调优试点</a>
+            <a class="nav-subitem" href="./projects/service.html">客服投诉联动项目</a>
+            <a class="nav-subitem create" href="./project-management.html">+ 新增项目</a>
+          </div>
+          <a class="nav-item active" href="./agents.html">Agent / Skill</a>
+        </nav>
+        <div class="sidebar-footer"><div class="user-avatar">S</div><div><strong>samhar</strong><p>产品负责人</p></div></div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Capability Matrix</p>
+            <h2>Agent / Skill 中心</h2>
+            <p class="page-description">这个栏目我保持了你满意的视觉风格，只把整体导航结构同步到了新的信息架构里。</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="segmented-control">
+              <span class="segment active">基础 Agent</span>
+              <span class="segment">项目 Agent</span>
+              <span class="segment">Skills</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="content-shell">
+          <div class="view">
+            <section class="agent-grid">
+              <article class="agent-card create-card">
+                <div class="card-avatar">+</div>
+                <h4>新增能力包</h4>
+                <p>后续可以接入新的专业 Agent 或企业工具技能，继续行业化复制。</p>
+                <div class="card-actions"><a class="button-secondary" href="./agents.html">创建 Agent</a></div>
+              </article>
+              <article class="agent-card">
+                <div class="card-avatar">知</div>
+                <div><h4>知识工程 Agent</h4><p>接入规程、日志、台账和时序数据，做 Schema 识别、结构化和图谱映射。</p></div>
+                <div class="tag-row"><span class="tag is-mint">数据接入</span><span class="tag">图谱构建</span><span class="tag">知识校验</span></div>
+              </article>
+              <article class="agent-card">
+                <div class="card-avatar">负</div>
+                <div><h4>负荷预测 Agent</h4><p>结合时序数据、天气和历史模式做负荷趋势预测，为异常解释和调控建议提供前置判断。</p></div>
+                <div class="tag-row"><span class="tag is-blue">预测</span><span class="tag">外部因素</span><span class="tag">趋势判断</span></div>
+              </article>
+              <article class="agent-card">
+                <div class="card-avatar">衡</div>
+                <div><h4>水力平衡 Agent</h4><p>围绕压差、流量和站点工况做平衡分析，更适合在项目页中被 Project Agent 按需唤醒。</p></div>
+                <div class="tag-row"><span class="tag is-amber">平衡分析</span><span class="tag">调控建议</span><span class="tag">约束校验</span></div>
+              </article>
+              <article class="agent-card">
+                <div class="card-avatar">项</div>
+                <div><h4>Project Agent</h4><p>每个项目一个 Project Agent，对应一个群聊工作区，负责拆解任务、唤醒专业 Agent 和保留项目记忆。</p></div>
+                <div class="tag-row"><span class="tag is-blue">项目编排</span><span class="tag">群聊入口</span><span class="tag">项目记忆</span></div>
+              </article>
+              <article class="agent-card">
+                <div class="card-avatar">管</div>
+                <div><h4>Manager Agent</h4><p>站在首页和项目管理层级上做审计、熔断和项目协调，让整个系统具备企业级治理属性。</p></div>
+                <div class="tag-row"><span class="tag is-rose">审计</span><span class="tag">熔断</span><span class="tag">冲突协调</span></div>
+              </article>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

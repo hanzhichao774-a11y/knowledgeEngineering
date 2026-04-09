@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeatGraph AI - 朝阳区智慧供热改造（project agent）</title>
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
+        </div>
+        <div class="brand-block"><div class="brand-mark">H</div><div><h1>HeatGraph AI</h1><p>供热运营智能工作台</p></div></div>
+        <a class="primary-ghost" href="./chaoyang.html"><span>+</span>新建任务</a>
+        <nav class="nav-group">
+          <p class="nav-caption">Workspace</p>
+          <a class="nav-item" href="../index.html">首页（manager agent）</a>
+          <a class="nav-item" href="../graph.html">数据中心（知识工程agent）</a>
+          <a class="nav-item active" href="../project-management.html">项目管理（manager agent）</a>
+          <div class="nav-subtree">
+            <a class="nav-subitem active" href="./chaoyang.html">朝阳区智慧供热改造（project agent）</a>
+            <a class="nav-subitem" href="./haidian.html">海淀热源调优试点</a>
+            <a class="nav-subitem" href="./service.html">客服投诉联动项目</a>
+            <a class="nav-subitem create" href="../project-management.html">+ 新增项目</a>
+          </div>
+          <a class="nav-item" href="../agents.html">Agent / Skill</a>
+        </nav>
+        <div class="sidebar-footer"><div class="user-avatar">S</div><div><strong>samhar</strong><p>产品负责人</p></div></div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Project Agent</p>
+            <h2>朝阳区智慧供热改造（project agent）</h2>
+            <p class="page-description">这是朝阳区项目对应的群聊工作区。这里的主体不是栏目，而是一个具体的 `Project Agent`。</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="segmented-control">
+              <span class="segment active">群聊</span>
+              <span class="segment">证据链</span>
+              <span class="segment">任务历史</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="content-shell">
+          <div class="view chat-page-layout">
+            <div class="chat-summary-grid">
+              <article class="chat-summary-card"><p>待处理问题</p><strong>4</strong></article>
+              <article class="chat-summary-card"><p>活跃 Agent</p><strong>5</strong></article>
+              <article class="chat-summary-card"><p>待审批动作</p><strong>2</strong></article>
+              <article class="chat-summary-card"><p>今日节能收益</p><strong>+4.3%</strong></article>
+            </div>
+
+            <div class="warroom-layout">
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>项目侧栏</h3>
+                    <p>这里保留项目级记忆、任务入口和当前参与的 Agent。</p>
+                  </div>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item"><strong>项目概览</strong><p>48 个换热站，3 个热源厂，当前重点关注北苑片区 7 个站点。</p></div>
+                  <div class="list-item"><strong>当前任务</strong><p>A 站回水温度异常、B 站阀位波动复核、夜间调控审批。</p></div>
+                  <div class="list-item"><strong>历史任务</strong><p>东区压差异常、住户投诉聚类、周报摘要生成。</p></div>
+                  <div class="list-item"><strong>参与 Agent</strong><p>Project Agent、Analysis Agent、Knowledge Agent、Forecast Agent、Manager Agent。</p></div>
+                </div>
+              </section>
+
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>项目群聊</h3>
+                    <p>这页就是群聊页面。Project Agent 在这里像群主一样组织协同。</p>
+                  </div>
+                  <span class="pill is-mint">当前话题：A 站异常诊断</span>
+                </div>
+
+                <div class="chat-thread">
+                  <div class="chat-bubble user">
+                    <span class="speaker">项目经理</span>
+                    <p>分析一下 A 站昨晚回水温度过低的原因，并给出今晚的处理建议。</p>
+                  </div>
+                  <div class="chat-bubble agent">
+                    <span class="speaker">Project Agent</span>
+                    <p>已创建任务链：1）读取 A 站 22:00-00:30 时序数据；2）检索规程 4.2；3）比对最近维修事件；4）生成建议动作并交 Manager Agent 审计。</p>
+                  </div>
+                  <div class="chat-bubble agent">
+                    <span class="speaker">Analysis Agent</span>
+                    <p>检测到 23:10 开始回水温度连续低于基线 2.8 摄氏度，23:18-23:27 阀位信号出现高频波动，同时压差短时上升 9.4%。</p>
+                  </div>
+                  <div class="chat-bubble agent">
+                    <span class="speaker">Knowledge Agent</span>
+                    <p>根据《供热运行规程》第 4.2 节，这类“温差下降 + 阀位波动”组合，需要优先排查阀门执行状态与支路末端短时负荷突增，不建议直接大幅调泵。</p>
+                  </div>
+                  <div class="chat-bubble agent">
+                    <span class="speaker">Forecast Agent</span>
+                    <p>昨晚 23:00 后外部气温下降 3.1 摄氏度，能解释部分负荷变化，但不足以单独解释全部异常。预测今晚同时间段仍会有 6%-8% 的需求抬升。</p>
+                  </div>
+                  <div class="chat-bubble agent">
+                    <span class="speaker">Project Agent</span>
+                    <p>综合判断：A 站异常更可能是“局部阀位执行异常 + 短时负荷抬升”叠加造成。建议先复核阀门状态，再做 5% 以内试探性调节并持续观察 20 分钟。</p>
+                  </div>
+                </div>
+
+                <div class="recommendation-grid" style="margin-top: 18px;">
+                  <div class="recommendation-card">
+                    <h4>结论</h4>
+                    <p>A 站问题更像局部调控异常，而不是纯粹天气影响造成的自然波动。</p>
+                  </div>
+                  <div class="recommendation-card">
+                    <h4>建议动作</h4>
+                    <p>先阀位复核，再做 5% 以内试探性调节；如果 20 分钟内回水未恢复，再升级排查支路末端。</p>
+                  </div>
+                  <div class="recommendation-card">
+                    <h4>审批状态</h4>
+                    <p>Manager Agent 已放行“阀位复核 + 5% 以内试探性调节”，拦截“8% 调泵建议”。</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>右侧协同轨迹</h3>
+                    <p>这里帮助客户看懂这不是普通聊天，而是一个 Project Agent 在组织工作。</p>
+                  </div>
+                </div>
+                <div class="timeline-list">
+                  <div class="timeline-item"><strong>09:12 Project Agent</strong><p>创建异常诊断任务链，唤醒 3 个专业 Agent。</p></div>
+                  <div class="timeline-item"><strong>09:13 调用数据</strong><p>读取 A 站时序数据 1524 条，命中 1 条维修事件和 2 条规程规则。</p></div>
+                  <div class="timeline-item"><strong>09:14 风险审计</strong><p>Manager Agent 放行低风险建议，拦截高风险大幅调泵动作。</p></div>
+                  <div class="timeline-item"><strong>09:15 等待人工确认</strong><p>当前待项目经理审批试探性调节方案。</p></div>
+                </div>
+                <div class="footer-note" style="margin-top: 16px;">
+                  这一栏后续可以升级成可展开的证据链面板，点开后看到具体时序图、规程摘录、历史维修单和审批日志。
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

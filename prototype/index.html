@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeatGraph AI Workbench</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+        </div>
+
+        <div class="brand-block">
+          <div class="brand-mark">H</div>
+          <div>
+            <h1>HeatGraph AI</h1>
+            <p>供热运营智能工作台</p>
+          </div>
+        </div>
+
+        <a class="primary-ghost" href="./projects/chaoyang.html">
+          <span>+</span>
+          新建任务
+        </a>
+
+        <nav class="nav-group">
+          <p class="nav-caption">Workspace</p>
+          <a class="nav-item active" href="./index.html">首页（manager agent）</a>
+          <a class="nav-item" href="./graph.html">数据中心（知识工程agent）</a>
+          <a class="nav-item" href="./project-management.html">项目管理（manager agent）</a>
+          <div class="nav-subtree">
+            <a class="nav-subitem" href="./projects/chaoyang.html">朝阳区智慧供热改造（project agent）</a>
+            <a class="nav-subitem" href="./projects/haidian.html">海淀热源调优试点</a>
+            <a class="nav-subitem" href="./projects/service.html">客服投诉联动项目</a>
+            <a class="nav-subitem create" href="./project-management.html">+ 新增项目</a>
+          </div>
+          <a class="nav-item" href="./agents.html">Agent / Skill</a>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-avatar">S</div>
+          <div>
+            <strong>samhar</strong>
+            <p>产品负责人</p>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Manager Agent</p>
+            <h2>首页（manager agent）</h2>
+            <p class="page-description">
+              这是 `Manager Agent` 的首页视角，只展示全局运行指标、系统风险和总体态势，不在这里展开具体项目操作。
+            </p>
+          </div>
+
+          <div class="topbar-actions">
+            <div class="segmented-control">
+              <span class="segment active">总览</span>
+              <a class="segment" href="./project-management.html">项目</a>
+              <a class="segment" href="./agents.html">能力</a>
+            </div>
+            <label class="searchbox">
+              <svg viewBox="0 0 20 20" aria-hidden="true">
+                <path
+                  d="M13.5 12.3l4 4-1.2 1.2-4-4a6 6 0 111.2-1.2zM8.5 13a4.5 4.5 0 100-9 4.5 4.5 0 000 9z"
+                />
+              </svg>
+              <input type="text" placeholder="搜索项目、Agent、任务..." />
+            </label>
+          </div>
+        </header>
+
+        <section class="content-shell">
+          <div class="view">
+            <div class="metric-row">
+              <article class="metric-card is-mint">
+                <h3>在线项目</h3>
+                <div class="value">03</div>
+                <div class="trend">当前有 3 个 Project Agent 正在服务业务</div>
+              </article>
+              <article class="metric-card is-blue">
+                <h3>活跃 Agent</h3>
+                <div class="value">12</div>
+                <div class="trend">知识工程、分析、预测、治理持续协同</div>
+              </article>
+              <article class="metric-card is-amber">
+                <h3>待审批动作</h3>
+                <div class="value">05</div>
+                <div class="trend">已下沉到项目管理页进一步查看</div>
+              </article>
+              <article class="metric-card is-rose">
+                <h3>高优先告警</h3>
+                <div class="value">02</div>
+                <div class="trend">都来自朝阳区项目</div>
+              </article>
+            </div>
+
+            <div class="overview-grid">
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>首页（manager agent）负责什么</h3>
+                    <p>你希望首页只展示上面的数据，这里就让它保持总览角色，不再展示项目目录、告警列表和具体项目聊天。</p>
+                  </div>
+                  <span class="pill is-mint">首页（manager agent）视角</span>
+                </div>
+                <div class="stage-flow">
+                  <div class="stage-step">
+                    <div>
+                      <strong>看全局项目态势</strong>
+                      <span class="mini-stat">项目数、活跃度、风险等级、系统负载</span>
+                    </div>
+                    <span class="step-index">1</span>
+                  </div>
+                  <div class="stage-step">
+                    <div>
+                      <strong>判断去哪一层处理问题</strong>
+                      <span class="mini-stat">数据问题去数据中心，项目问题去项目管理，再进入具体项目页</span>
+                    </div>
+                    <span class="step-index">2</span>
+                  </div>
+                  <div class="stage-step">
+                    <div>
+                      <strong>不处理具体业务细节</strong>
+                      <span class="mini-stat">具体异常诊断和群聊协同都放在各个 Project Agent 页面</span>
+                    </div>
+                    <span class="step-index">3</span>
+                  </div>
+                </div>
+                <div class="quick-links">
+                  <a class="button" href="./project-management.html">进入项目管理</a>
+                  <a class="button-secondary" href="./graph.html">进入数据中心</a>
+                  <a class="button-secondary" href="./projects/chaoyang.html">进入朝阳项目页</a>
+                </div>
+              </section>
+
+              <section class="surface-card">
+                <div class="section-title">
+                  <div>
+                    <h3>栏目与 Agent 对应关系</h3>
+                    <p>整体层级已经按你的要求改成“首页（manager agent） - 数据中心（知识工程agent） - 项目管理（manager agent） - 项目页 - Agent/Skill”。</p>
+                  </div>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item">
+                    <strong>首页（manager agent）</strong>
+                    <p>对应 `Manager Agent`，只看全局数据。</p>
+                  </div>
+                  <div class="list-item">
+                    <strong>数据中心</strong>
+                    <p>对应 `知识工程 Agent`，管理知识库数据和图谱底座。</p>
+                  </div>
+                  <div class="list-item">
+                    <strong>项目管理（manager agent）</strong>
+                    <p>也是 `Manager Agent`，但这里看项目列表、项目问题、待办与告警。</p>
+                  </div>
+                  <div class="list-item">
+                    <strong>项目页</strong>
+                    <p>每个小项目就是一个 `Project Agent` 的群聊工作区。</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

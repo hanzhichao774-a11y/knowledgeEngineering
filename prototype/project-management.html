@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HeatGraph AI - 项目管理（manager agent）</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-frame">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true">
+          <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
+        </div>
+        <div class="brand-block"><div class="brand-mark">H</div><div><h1>HeatGraph AI</h1><p>供热运营智能工作台</p></div></div>
+        <a class="primary-ghost" href="./projects/chaoyang.html"><span>+</span>新建任务</a>
+        <nav class="nav-group">
+          <p class="nav-caption">Workspace</p>
+          <a class="nav-item" href="./index.html">首页（manager agent）</a>
+          <a class="nav-item" href="./graph.html">数据中心（知识工程agent）</a>
+          <a class="nav-item active" href="./project-management.html">项目管理（manager agent）</a>
+          <div class="nav-subtree">
+            <a class="nav-subitem" href="./projects/chaoyang.html">朝阳区智慧供热改造（project agent）</a>
+            <a class="nav-subitem" href="./projects/haidian.html">海淀热源调优试点</a>
+            <a class="nav-subitem" href="./projects/service.html">客服投诉联动项目</a>
+            <a class="nav-subitem create" href="./project-management.html">+ 新增项目</a>
+          </div>
+          <a class="nav-item" href="./agents.html">Agent / Skill</a>
+        </nav>
+        <div class="sidebar-footer"><div class="user-avatar">S</div><div><strong>samhar</strong><p>产品负责人</p></div></div>
+      </aside>
+
+      <main class="main-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Manager Agent</p>
+            <h2>项目管理（manager agent）</h2>
+            <p class="page-description">这里展示现有项目数据和问题，同时承接待办与告警。每个小项目都代表一个独立的 Project Agent 页面。</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="segmented-control">
+              <span class="segment active">项目目录</span>
+              <span class="segment">待办与告警</span>
+              <span class="segment">项目问题</span>
+            </div>
+          </div>
+        </header>
+
+        <section class="content-shell">
+          <div class="view">
+            <div class="metric-row">
+              <article class="metric-card is-mint"><h3>项目总数</h3><div class="value">03</div><div class="trend">当前由 3 个 Project Agent 承载</div></article>
+              <article class="metric-card is-blue"><h3>项目问题数</h3><div class="value">09</div><div class="trend">需要持续追踪的问题共 9 个</div></article>
+              <article class="metric-card is-amber"><h3>待办处理</h3><div class="value">05</div><div class="trend">审批、复核和数据补录三类任务</div></article>
+              <article class="metric-card is-rose"><h3>高优先告警</h3><div class="value">02</div><div class="trend">当前都来自朝阳区项目</div></article>
+            </div>
+
+            <section class="portfolio-grid">
+              <article class="project-card create-card">
+                <div class="card-avatar">+</div>
+                <h4>新增项目</h4>
+                <p>创建新的 Project Agent 工作区，并绑定数据模板、权限链和基础 Agent 组合。</p>
+                <div class="card-actions"><a class="button-secondary" href="./project-management.html">创建项目</a></div>
+              </article>
+
+              <article class="project-card">
+                <div class="project-header">
+                  <div>
+                    <h4>朝阳区智慧供热改造（project agent）</h4>
+                    <p>Project Agent 正在处理 A 站回水温度异常与夜间调控审批。</p>
+                  </div>
+                  <span class="status-badge rose">高关注</span>
+                </div>
+                <div class="project-kpis">
+                  <div class="project-kpi"><span>待处理问题</span><strong>4</strong></div>
+                  <div class="project-kpi"><span>待审批动作</span><strong>2</strong></div>
+                  <div class="project-kpi"><span>活跃 Agent</span><strong>5</strong></div>
+                  <div class="project-kpi"><span>今日协同次数</span><strong>11</strong></div>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item"><strong>当前问题</strong><p>A 站回水温度低、阀位波动异常、夜间负荷预测偏差。</p></div>
+                </div>
+                <div class="card-actions"><a class="button" href="./projects/chaoyang.html">进入项目页</a></div>
+              </article>
+
+              <article class="project-card">
+                <div class="project-header">
+                  <div>
+                    <h4>海淀热源调优试点</h4>
+                    <p>Project Agent 主要围绕热源侧负荷预测与平衡优化开展分析。</p>
+                  </div>
+                  <span class="status-badge amber">跟踪中</span>
+                </div>
+                <div class="project-kpis">
+                  <div class="project-kpi"><span>待处理问题</span><strong>3</strong></div>
+                  <div class="project-kpi"><span>待审批动作</span><strong>1</strong></div>
+                  <div class="project-kpi"><span>活跃 Agent</span><strong>4</strong></div>
+                  <div class="project-kpi"><span>今日协同次数</span><strong>7</strong></div>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item"><strong>当前问题</strong><p>热源出力波动、早高峰预测区间偏宽。</p></div>
+                </div>
+                <div class="card-actions"><a class="button" href="./projects/haidian.html">进入项目页</a></div>
+              </article>
+
+              <article class="project-card">
+                <div class="project-header">
+                  <div>
+                    <h4>客服投诉联动项目</h4>
+                    <p>Project Agent 聚焦投诉工单、区域问题聚类与排查建议。</p>
+                  </div>
+                  <span class="status-badge green">稳定</span>
+                </div>
+                <div class="project-kpis">
+                  <div class="project-kpi"><span>待处理问题</span><strong>2</strong></div>
+                  <div class="project-kpi"><span>待审批动作</span><strong>0</strong></div>
+                  <div class="project-kpi"><span>活跃 Agent</span><strong>3</strong></div>
+                  <div class="project-kpi"><span>今日协同次数</span><strong>5</strong></div>
+                </div>
+                <div class="list-stack">
+                  <div class="list-item"><strong>当前问题</strong><p>北苑片区住户室温不足投诉集中，需做区域原因归因。</p></div>
+                </div>
+                <div class="card-actions"><a class="button" href="./projects/service.html">进入项目页</a></div>
+              </article>
+            </section>
+
+            <div class="overview-grid">
+              <section class="surface-card">
+                <div class="section-title"><div><h3>待办与告警</h3><p>这部分已经从首页下沉到项目管理页，符合新的层级关系。</p></div></div>
+                <div class="audit-list">
+                  <div class="audit-item"><strong>朝阳区项目 - 审批待办</strong><p>A 站“5% 以内试探性调节”建议待项目经理审批。</p></div>
+                  <div class="audit-item"><strong>朝阳区项目 - 高风险提醒</strong><p>存在一条 8% 调泵建议，已被 Manager Agent 拦截。</p></div>
+                  <div class="audit-item"><strong>海淀项目 - 数据补录</strong><p>热源厂 2 号机组昨晚时序缺失 15 分钟，需数据中心补录。</p></div>
+                  <div class="audit-item"><strong>客服投诉项目 - 排查待派发</strong><p>北苑片区投诉聚类报告已生成，待分配给运维人员。</p></div>
+                </div>
+              </section>
+
+              <section class="surface-card">
+                <div class="section-title"><div><h3>项目问题分布</h3><p>帮助 Manager Agent 快速判断资源应该投向哪里。</p></div></div>
+                <div class="tiny-kpi">
+                  <div class="row"><span>调控异常</span><strong>4</strong></div>
+                  <div class="row"><span>预测偏差</span><strong>2</strong></div>
+                  <div class="row"><span>数据缺口</span><strong>1</strong></div>
+                  <div class="row"><span>投诉聚类</span><strong>2</strong></div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
