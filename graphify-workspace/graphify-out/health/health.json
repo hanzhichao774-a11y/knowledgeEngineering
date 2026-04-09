@@ -1,0 +1,38 @@
+{
+  "summary": {
+    "source_files": 1,
+    "normalized_files": 1,
+    "record_nodes": 101,
+    "memory_items": 1,
+    "graph_nodes": 128,
+    "graph_edges": 134,
+    "ambiguous_edges": 0,
+    "inferred_edges": 4,
+    "low_confidence_edges": 0,
+    "unrepresented_sources": 0
+  },
+  "warnings": [
+    "PDF normalization is not using MinerU. Scanned pages and image-only tables may still be under-extracted."
+  ],
+  "checks": {
+    "unrepresented_sources": [],
+    "mineru_normalized_files": [],
+    "pdf_normalized_files": [
+      {
+        "normalized_path": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/converted/2026-04-09T03-28-15-693Z-68211456-4933-4433-8788-8ca204c1afa5-热力简报_2月9日__e54811f1.md",
+        "original_source_file": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/2026-04-09T03-28-15-693Z-68211456-4933-4433-8788-8ca204c1afa5-热力简报_2月9日_.pdf",
+        "original_filename": "2026-04-09T03-28-15-693Z-68211456-4933-4433-8788-8ca204c1afa5-热力简报_2月9日_.pdf",
+        "normalized_from": "pdf",
+        "size_bytes": 36010
+      }
+    ],
+    "low_confidence_edges": [],
+    "ambiguous_edges": [],
+    "memory_index": [
+      {
+        "path": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/memory/query_20260409_040108_2月8日_0_24时_北京市海淀分公司热力诉求总量详细信息.md",
+        "size_bytes": 889
+      }
+    ]
+  }
+}

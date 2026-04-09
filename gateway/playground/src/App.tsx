@@ -169,8 +169,6 @@ export default function App() {
   const [replaceExistingUploads, setReplaceExistingUploads] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<unknown>(null);
-  const [runningGraphify, setRunningGraphify] = useState(false);
-  const [runGraphifyResult, setRunGraphifyResult] = useState<unknown>(null);
   const [graphifyStatusLoading, setGraphifyStatusLoading] = useState(false);
   const [graphifyStatus, setGraphifyStatus] = useState<unknown>(null);
   const [graphifyFiles, setGraphifyFiles] = useState<PlaygroundFileInfo[]>([]);
@@ -253,7 +251,6 @@ export default function App() {
       setUploadResult(payload);
       if (response.ok) {
         setSelectedFiles([]);
-        setRunGraphifyResult(null);
         const nextFiles = (payload as { uploadedFiles?: PlaygroundFileInfo[] }).uploadedFiles ?? [];
         setGraphifyFiles(nextFiles);
         await loadGraphifyStatus();
@@ -265,23 +262,6 @@ export default function App() {
       });
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function runGraphifyBuild() {
-    setRunningGraphify(true);
-    setRunGraphifyResult(null);
-    try {
-      const response = await requestJson('/api/graphify-playground/run', 'POST');
-      setRunGraphifyResult(response.body);
-      await loadGraphifyStatus();
-    } catch (error) {
-      setRunGraphifyResult({
-        ok: false,
-        error: error instanceof Error ? error.message : 'Run graphify failed',
-      });
-    } finally {
-      setRunningGraphify(false);
     }
   }
 
@@ -319,6 +299,30 @@ export default function App() {
     return typeof answer === 'string' ? answer : '';
   }, [graphifyQueryResult]);
 
+  const graphifyMeta = useMemo(() => {
+    const preferred = graphifyStatus && typeof graphifyStatus === 'object' ? graphifyStatus : uploadResult;
+    if (!preferred || typeof preferred !== 'object') {
+      return {
+        graphifySkillCommand: '/graphify /Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace',
+        requiresManualGraphify: false,
+      };
+    }
+    const payload = preferred as Record<string, unknown>;
+    return {
+      graphifySkillCommand:
+        typeof payload.graphifySkillCommand === 'string'
+          ? payload.graphifySkillCommand
+          : '/graphify /Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace',
+      requiresManualGraphify: payload.requiresManualGraphify === true,
+    };
+  }, [graphifyStatus, uploadResult]);
+
+  const graphifyPayloadPreview = useMemo(() => {
+    if (uploadResult) return prettyJson(uploadResult);
+    if (graphifyStatus) return prettyJson(graphifyStatus);
+    return 'No graphify payload yet.';
+  }, [graphifyStatus, uploadResult]);
+
   return (
     <main className="page-shell">
       <section className="hero-panel">
@@ -326,7 +330,7 @@ export default function App() {
           <p className="eyebrow">Gateway Alignment Console</p>
           <h1>测试 gateway 与 graphify 的联调链路</h1>
           <p className="hero-copy">
-            上半区保留 gateway 接口测试，下半区新增 Graphify Lab，可以上传多种格式文件到 graphify workspace、触发 rebuild，并继续做知识库查询。
+            上半区保留 gateway 接口测试，下半区新增 Graphify Lab。这里负责上传和查看状态；真正生效的 graphify 编译仍然需要在 Codex 中执行 skill。
           </p>
         </div>
         <div className="hero-badges">
@@ -434,7 +438,7 @@ export default function App() {
           <div className="panel-header">
             <div>
               <p className="eyebrow">Graphify Lab</p>
-              <h2>上传文件并手动执行 graphify</h2>
+              <h2>上传到 graphify-workspace，随后在 Codex 执行 graphify skill</h2>
             </div>
             <button className="secondary-button" onClick={loadGraphifyStatus} type="button">
               {graphifyStatusLoading ? 'Loading...' : '刷新状态'}
@@ -449,7 +453,7 @@ export default function App() {
               onChange={(event) => setSelectedFiles(Array.from(event.target.files ?? []))}
             />
             <strong>选择若干文件</strong>
-            <span>支持 graphify 可识别的多种格式，例如 PDF、DOCX、XLSX、CSV、TXT、MD、代码文件等。</span>
+            <span>文件会直接写入 `graphify-workspace` 根目录。支持 PDF、DOCX、XLSX、CSV、TXT、MD、代码文件等。</span>
           </label>
 
           {selectedFiles.length > 0 ? (
@@ -470,14 +474,17 @@ export default function App() {
                 checked={replaceExistingUploads}
                 onChange={(event) => setReplaceExistingUploads(event.target.checked)}
               />
-              <span>上传前清空现有 workspace 内容</span>
+              <span>上传前清空现有 workspace 内容（保留 .graphify_python）</span>
             </label>
             <button className="primary-button" onClick={uploadGraphifyFiles} type="button" disabled={selectedFiles.length === 0 || uploading}>
               {uploading ? 'Uploading...' : '上传文件'}
             </button>
-            <button className="secondary-button" onClick={runGraphifyBuild} type="button" disabled={runningGraphify || graphifyFiles.length === 0}>
-              {runningGraphify ? 'Running...' : '执行 Graphify'}
-            </button>
+          </div>
+
+          <div className={`instruction-box ${graphifyMeta.requiresManualGraphify ? 'warning' : ''}`}>
+            <p className="eyebrow">Next Step</p>
+            <strong>{graphifyMeta.requiresManualGraphify ? '上传后需要手动执行 Codex skill' : '当前 graphify-out 已和上传文件对齐'}</strong>
+            <pre>{graphifyMeta.graphifySkillCommand}</pre>
           </div>
 
           <div className="split-panel">
@@ -494,8 +501,8 @@ export default function App() {
               </div>
             </div>
             <div>
-              <p className="eyebrow">Upload / Run / Status Payload</p>
-              <pre>{runGraphifyResult ? prettyJson(runGraphifyResult) : uploadResult ? prettyJson(uploadResult) : graphifyStatus ? prettyJson(graphifyStatus) : 'No graphify payload yet.'}</pre>
+              <p className="eyebrow">Upload / Status Payload</p>
+              <pre>{graphifyPayloadPreview}</pre>
             </div>
           </div>
         </div>
@@ -506,7 +513,7 @@ export default function App() {
               <p className="eyebrow">Knowledge Query</p>
               <h2>基于 graphify 结果继续对话查询</h2>
             </div>
-            <button className="primary-button" onClick={queryGraphifyKnowledge} type="button" disabled={querying}>
+            <button className="primary-button" onClick={queryGraphifyKnowledge} type="button" disabled={querying || graphifyMeta.requiresManualGraphify}>
               {querying ? 'Querying...' : '发起查询'}
             </button>
           </div>
@@ -520,7 +527,9 @@ export default function App() {
             <div>
               <p className="eyebrow">Answer Preview</p>
               <div className="answer-preview">
-                {gatewayAnswerPreview || '这里会显示 gateway 基于 graphify 检索上下文生成的最终回答。'}
+                {graphifyMeta.requiresManualGraphify
+                  ? '上传文件比当前 graphify-out 更新。先在 Codex 中执行上面的 /graphify 命令，再回来查询。'
+                  : gatewayAnswerPreview || '这里会显示 gateway 基于 graphify 检索上下文生成的最终回答。'}
               </div>
               {graphifyQueryError ? <pre>{graphifyQueryError}</pre> : null}
             </div>

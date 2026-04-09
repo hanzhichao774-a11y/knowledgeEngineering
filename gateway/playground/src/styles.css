@@ -222,6 +222,28 @@ pre {
   color: rgba(17, 34, 29, 0.8);
 }
 
+.instruction-box {
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  background: rgba(17, 34, 29, 0.06);
+  border: 1px solid rgba(17, 34, 29, 0.08);
+}
+
+.instruction-box.warning {
+  background: rgba(247, 186, 85, 0.16);
+  border-color: rgba(180, 118, 15, 0.18);
+}
+
+.instruction-box strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.instruction-box pre {
+  margin: 0;
+}
+
 .upload-zone {
   display: flex;
   flex-direction: column;

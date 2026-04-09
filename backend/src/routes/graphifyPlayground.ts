@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import type { GatewayClientLike } from '../clients/GatewayClient.js';
@@ -11,12 +11,15 @@ interface GraphifyPlaygroundRouteOptions {
   graphifyClient: GraphifyClientLike;
 }
 
-const PLAYGROUND_IMPORT_DIR = 'playground-imports';
+const GRAPHIFY_OUTPUT_DIR = 'graphify-out';
+const WORKSPACE_PROTECTED_NAMES = new Set([
+  '.graphify_python',
+]);
 
 export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRouteOptions> = async (app, options) => {
   const runtimeConfig = resolveGraphifyRuntimeConfig();
   const workspacePath = runtimeConfig.workspacePath;
-  const importDir = resolve(workspacePath, PLAYGROUND_IMPORT_DIR);
+  const graphifySkillCommand = `/graphify ${workspacePath}`;
 
   app.get('/graphify-playground/status', async (_req, reply) => {
     const [snapshot, health, files] = await Promise.all([
@@ -26,13 +29,16 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
         snapshotId: null,
         health: { warnings: ['health_unavailable'] },
       })),
-      listImportFiles(importDir),
+      listWorkspaceFiles(workspacePath),
     ]);
+    const requiresManualGraphify = shouldRunGraphifySkill(files, snapshot.updatedAt);
 
     return reply.send({
       ok: true,
       workspacePath,
-      importDir,
+      importDir: workspacePath,
+      graphifySkillCommand,
+      requiresManualGraphify,
       snapshot,
       health,
       files,
@@ -46,10 +52,8 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
   }>('/graphify-playground/upload', async (req, reply) => {
     const replaceExisting = req.query.replaceExisting !== 'false';
     if (replaceExisting) {
-      await rm(importDir, { recursive: true, force: true });
-      await rm(resolve(workspacePath, 'graphify-out'), { recursive: true, force: true });
+      await clearWorkspaceUploads(workspacePath);
     }
-    await mkdir(importDir, { recursive: true });
 
     const uploadedFiles: Array<{
       id: string;
@@ -68,7 +72,7 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
       const extension = extname(safeName);
       const baseName = basename(safeName, extension) || 'upload';
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const targetPath = resolve(importDir, `${timestamp}-${fileId}-${baseName}${extension}`);
+      const targetPath = resolve(workspacePath, `${timestamp}-${fileId}-${baseName}${extension}`);
       const buffer = await part.toBuffer();
       await writeFile(targetPath, buffer);
       uploadedFiles.push({
@@ -91,36 +95,23 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
     return reply.send({
       ok: true,
       workspacePath,
-      importDir,
+      importDir: workspacePath,
       replaceExisting,
       uploadedFiles,
+      graphifySkillCommand,
       graphifyRunRequired: true,
+      requiresManualGraphify: true,
+      message: 'Upload completed. Run the Codex graphify skill to refresh graphify-out.',
     });
   });
 
   app.post('/graphify-playground/run', async (_req, reply) => {
-    const files = await listImportFiles(importDir);
-    if (files.length === 0) {
-      return reply.code(400).send({
-        ok: false,
-        error: 'No files available to run graphify on',
-        workspacePath,
-        importDir,
-      });
-    }
-
-    const rebuild = await options.graphifyClient.rebuild({
-      mode: 'incremental',
-      changedFiles: files.map((item) => item.path),
-      reason: 'playground_manual_run',
-    });
-
-    return reply.send({
-      ok: true,
+    return reply.code(409).send({
+      ok: false,
+      error: 'Playground run endpoint is deprecated. Run the Codex graphify skill instead.',
       workspacePath,
-      importDir,
-      fileCount: files.length,
-      rebuild,
+      importDir: workspacePath,
+      graphifySkillCommand,
     });
   });
 
@@ -142,7 +133,7 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
     }
 
     const snapshot = await options.graphifyClient.getSnapshotStatus();
-    const assetResults = await searchPlaygroundAssets(workspacePath, importDir, question, req.body.topN ?? 5);
+    const assetResults = await searchPlaygroundAssets(workspacePath, question, req.body.topN ?? 5);
     if (!snapshot.exists && assetResults.length === 0) {
       return reply.code(503).send({
         ok: false,
@@ -233,15 +224,16 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
   });
 };
 
-async function listImportFiles(importDir: string) {
+async function listWorkspaceFiles(workspacePath: string) {
   try {
-    const names = await readdir(importDir);
+    const names = await readdir(workspacePath);
     const files = await Promise.all(
       names
-        .filter((name) => !name.startsWith('.'))
+        .filter((name) => shouldTreatAsWorkspaceInput(name))
         .map(async (name) => {
-          const filePath = resolve(importDir, name);
+          const filePath = resolve(workspacePath, name);
           const fileStat = await stat(filePath);
+          if (!fileStat.isFile()) return null;
           return {
             name,
             path: filePath,
@@ -250,7 +242,9 @@ async function listImportFiles(importDir: string) {
           };
         }),
     );
-    return files.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return files
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   } catch {
     return [];
   }
@@ -258,6 +252,32 @@ async function listImportFiles(importDir: string) {
 
 function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9._\-\u4e00-\u9fa5]/g, '_');
+}
+
+function shouldTreatAsWorkspaceInput(name: string): boolean {
+  if (name.startsWith('.')) return false;
+  if (name === GRAPHIFY_OUTPUT_DIR) return false;
+  return true;
+}
+
+async function clearWorkspaceUploads(workspacePath: string): Promise<void> {
+  const names = await readdir(workspacePath).catch(() => []);
+  await Promise.all(
+    names
+      .filter((name) => !WORKSPACE_PROTECTED_NAMES.has(name))
+      .map((name) => rm(resolve(workspacePath, name), { recursive: true, force: true })),
+  );
+}
+
+function shouldRunGraphifySkill(
+  files: Array<{ updatedAt: string }>,
+  snapshotUpdatedAt?: string,
+): boolean {
+  if (files.length === 0) return false;
+  if (!snapshotUpdatedAt) return true;
+  const snapshotTime = Date.parse(snapshotUpdatedAt);
+  if (Number.isNaN(snapshotTime)) return true;
+  return files.some((file) => Date.parse(file.updatedAt) > snapshotTime);
 }
 
 function normalizeStructuredGraphifyAnswer(answer: unknown): {
@@ -284,8 +304,8 @@ function normalizeStructuredGraphifyAnswer(answer: unknown): {
   };
 }
 
-async function searchPlaygroundAssets(workspacePath: string, importDir: string, question: string, topN: number) {
-  const sourceIndexPath = resolve(workspacePath, 'graphify-out/raw/source_index.json');
+async function searchPlaygroundAssets(workspacePath: string, question: string, topN: number) {
+  const sourceIndexPath = resolve(workspacePath, `${GRAPHIFY_OUTPUT_DIR}/raw/source_index.json`);
   const payload = await readJsonFile<Array<Record<string, unknown>>>(sourceIndexPath);
   if (!payload) return [];
 
@@ -301,7 +321,8 @@ async function searchPlaygroundAssets(workspacePath: string, importDir: string, 
 
   for (const entry of payload) {
     const sourcePath = String(entry.source_path ?? '');
-    if (!sourcePath.startsWith(importDir)) continue;
+    if (!sourcePath.startsWith(workspacePath)) continue;
+    if (sourcePath.includes(`/${GRAPHIFY_OUTPUT_DIR}/`)) continue;
 
     const normalizedPath = typeof entry.normalized_path === 'string' ? entry.normalized_path : undefined;
     const readablePath = normalizedPath ?? sourcePath;

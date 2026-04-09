@@ -1,0 +1,18 @@
+{
+  "asset_root": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out",
+  "source_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/raw/source_index.json",
+  "normalized_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/normalized/normalized_index.json",
+  "records": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/records/records.jsonl",
+  "record_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/records/index.json",
+  "graph": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/graph/graph.json",
+  "graph_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/graph/index.json",
+  "report": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/reports/GRAPH_REPORT.md",
+  "report_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/reports/index.json",
+  "memory_index": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/memory/index.json",
+  "health_json": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/health/health.json",
+  "health_markdown": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/health/HEALTH_REPORT.md",
+  "record_count": 101,
+  "normalized_count": 2,
+  "source_count": 4,
+  "summary_path": "/Users/zhangchuang/claude/knowledgeEngineering/graphify-workspace/graphify-out/assets.json"
+}
