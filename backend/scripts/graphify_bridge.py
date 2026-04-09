@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import sys
+import io
+import contextlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -125,7 +127,8 @@ def main() -> None:
             try:
                 from graphify.watch import _rebuild_code
 
-                _rebuild_code(workspace)
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    _rebuild_code(workspace)
             except Exception:
                 pass
 

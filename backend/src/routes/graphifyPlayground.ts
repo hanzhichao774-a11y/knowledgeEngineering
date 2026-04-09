@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import type { GatewayClientLike } from '../clients/GatewayClient.js';
@@ -39,7 +39,16 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
     });
   });
 
-  app.post('/graphify-playground/upload', async (req, reply) => {
+  app.post<{
+    Querystring: {
+      replaceExisting?: string;
+    };
+  }>('/graphify-playground/upload', async (req, reply) => {
+    const replaceExisting = req.query.replaceExisting !== 'false';
+    if (replaceExisting) {
+      await rm(importDir, { recursive: true, force: true });
+      await rm(resolve(workspacePath, 'graphify-out'), { recursive: true, force: true });
+    }
     await mkdir(importDir, { recursive: true });
 
     const uploadedFiles: Array<{
@@ -79,17 +88,38 @@ export const graphifyPlaygroundRoutes: FastifyPluginAsync<GraphifyPlaygroundRout
       });
     }
 
+    return reply.send({
+      ok: true,
+      workspacePath,
+      importDir,
+      replaceExisting,
+      uploadedFiles,
+      graphifyRunRequired: true,
+    });
+  });
+
+  app.post('/graphify-playground/run', async (_req, reply) => {
+    const files = await listImportFiles(importDir);
+    if (files.length === 0) {
+      return reply.code(400).send({
+        ok: false,
+        error: 'No files available to run graphify on',
+        workspacePath,
+        importDir,
+      });
+    }
+
     const rebuild = await options.graphifyClient.rebuild({
       mode: 'incremental',
-      changedFiles: uploadedFiles.map((item) => item.storedPath),
-      reason: 'playground_upload',
+      changedFiles: files.map((item) => item.path),
+      reason: 'playground_manual_run',
     });
 
     return reply.send({
       ok: true,
       workspacePath,
       importDir,
-      uploadedFiles,
+      fileCount: files.length,
       rebuild,
     });
   });

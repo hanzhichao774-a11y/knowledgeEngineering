@@ -166,8 +166,11 @@ export default function App() {
   });
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [replaceExistingUploads, setReplaceExistingUploads] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<unknown>(null);
+  const [runningGraphify, setRunningGraphify] = useState(false);
+  const [runGraphifyResult, setRunGraphifyResult] = useState<unknown>(null);
   const [graphifyStatusLoading, setGraphifyStatusLoading] = useState(false);
   const [graphifyStatus, setGraphifyStatus] = useState<unknown>(null);
   const [graphifyFiles, setGraphifyFiles] = useState<PlaygroundFileInfo[]>([]);
@@ -242,7 +245,7 @@ export default function App() {
         formData.append('files', file);
       }
 
-      const response = await fetch('/api/graphify-playground/upload', {
+      const response = await fetch(`/api/graphify-playground/upload?replaceExisting=${replaceExistingUploads ? 'true' : 'false'}`, {
         method: 'POST',
         body: formData,
       });
@@ -250,6 +253,7 @@ export default function App() {
       setUploadResult(payload);
       if (response.ok) {
         setSelectedFiles([]);
+        setRunGraphifyResult(null);
         const nextFiles = (payload as { uploadedFiles?: PlaygroundFileInfo[] }).uploadedFiles ?? [];
         setGraphifyFiles(nextFiles);
         await loadGraphifyStatus();
@@ -261,6 +265,23 @@ export default function App() {
       });
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function runGraphifyBuild() {
+    setRunningGraphify(true);
+    setRunGraphifyResult(null);
+    try {
+      const response = await requestJson('/api/graphify-playground/run', 'POST');
+      setRunGraphifyResult(response.body);
+      await loadGraphifyStatus();
+    } catch (error) {
+      setRunGraphifyResult({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Run graphify failed',
+      });
+    } finally {
+      setRunningGraphify(false);
     }
   }
 
@@ -413,7 +434,7 @@ export default function App() {
           <div className="panel-header">
             <div>
               <p className="eyebrow">Graphify Lab</p>
-              <h2>上传文件并重建知识库</h2>
+              <h2>上传文件并手动执行 graphify</h2>
             </div>
             <button className="secondary-button" onClick={loadGraphifyStatus} type="button">
               {graphifyStatusLoading ? 'Loading...' : '刷新状态'}
@@ -443,8 +464,19 @@ export default function App() {
           ) : null}
 
           <div className="action-row">
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={replaceExistingUploads}
+                onChange={(event) => setReplaceExistingUploads(event.target.checked)}
+              />
+              <span>上传前清空现有 workspace 内容</span>
+            </label>
             <button className="primary-button" onClick={uploadGraphifyFiles} type="button" disabled={selectedFiles.length === 0 || uploading}>
-              {uploading ? 'Uploading...' : '上传并重建'}
+              {uploading ? 'Uploading...' : '上传文件'}
+            </button>
+            <button className="secondary-button" onClick={runGraphifyBuild} type="button" disabled={runningGraphify || graphifyFiles.length === 0}>
+              {runningGraphify ? 'Running...' : '执行 Graphify'}
             </button>
           </div>
 
@@ -462,8 +494,8 @@ export default function App() {
               </div>
             </div>
             <div>
-              <p className="eyebrow">Upload / Status Payload</p>
-              <pre>{uploadResult ? prettyJson(uploadResult) : graphifyStatus ? prettyJson(graphifyStatus) : 'No graphify payload yet.'}</pre>
+              <p className="eyebrow">Upload / Run / Status Payload</p>
+              <pre>{runGraphifyResult ? prettyJson(runGraphifyResult) : uploadResult ? prettyJson(uploadResult) : graphifyStatus ? prettyJson(graphifyStatus) : 'No graphify payload yet.'}</pre>
             </div>
           </div>
         </div>
