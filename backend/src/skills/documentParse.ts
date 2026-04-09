@@ -1,22 +1,6 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
-import { callLLM, extractJSON } from '../services/LLMService.js';
 import { parseDocument, parsePdfWithDocling, parsePdfWithVision } from '../services/DocumentParserService.js';
-import { crossValidate, type ValidationResult } from '../services/CrossValidator.js';
-
-const SUMMARY_PROMPT = `你是一个专业的文档分析助手。用户会给你一段文档内容（Markdown 格式），请分析文档结构并返回 JSON 格式的结果。
-
-要求返回如下 JSON 结构（不要包含其他内容）：
-\`\`\`json
-{
-  "pageCount": <估计页数>,
-  "chapters": <章节数>,
-  "paragraphs": <段落数>,
-  "tables": <表格数>,
-  "summary": "<500字以内的文档摘要，必须包含关键数值和表格数据概要>"
-}
-\`\`\`
-
-重要：summary 中必须保留文档中的关键数值、表格列名、数据范围等信息，不要只写泛泛的概述。`;
+import { crossValidate } from '../services/CrossValidator.js';
 
 export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillResult> {
   const startTime = Date.now();
@@ -47,11 +31,18 @@ export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillRe
       console.log(`[Skill:documentParse] ${result.format} parsed via ${result.channel}: ${documentContent.length} chars`);
     }
 
-    const contentForLLM = documentContent.slice(0, 15000);
-    const userPrompt = `请分析以下文档内容：\n\n${contentForLLM}`;
-
-    const { text, usage } = await callLLM(SUMMARY_PROMPT, userPrompt);
-    const data = extractJSON<Record<string, unknown>>(text);
+    const gatewayResult = await ctx.services.gateway.runSkill({
+      taskId: ctx.taskId,
+      workspaceId: ctx.workspaceId,
+      skillName: 'document-parse-summary',
+      input: {
+        documentText: documentContent.slice(0, 15000),
+      },
+      context: {
+        filePath: ctx.filePath,
+      },
+    });
+    const data: Record<string, unknown> = { ...gatewayResult.result };
 
     data.rawText = documentContent;
     data.validation = validationInfo;
@@ -62,7 +53,7 @@ export async function documentParseSkill(ctx: ExecutionContext): Promise<SkillRe
       skillName: '多模态文档解析',
       status: 'success',
       data,
-      tokenUsed: usage?.inputTokens ?? 0,
+      tokenUsed: gatewayResult.usage.inputTokens,
       duration,
     };
   } catch (err) {

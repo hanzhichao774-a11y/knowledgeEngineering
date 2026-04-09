@@ -15,12 +15,12 @@ function extractKeywords(question: string): string[] {
   const separators = /[，。？！、；：""''（）\s,.\?!;:()[\]{}<>·\-—_\/\\|@#$%^&*+=~`]/;
   const tokens = question
     .split(separators)
-    .map((t) => t.trim())
-    .filter((t) => t.length >= 2);
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
 
   const keywords: string[] = [];
   for (const token of tokens) {
-    const cleaned = [...stopWords].reduce((s, w) => s.replace(new RegExp(`^${w}|${w}$`, 'g'), ''), token).trim();
+    const cleaned = [...stopWords].reduce((value, stopWord) => value.replace(new RegExp(`^${stopWord}|${stopWord}$`, 'g'), ''), token).trim();
     if (cleaned.length >= 2) {
       keywords.push(cleaned);
     }
@@ -37,26 +37,78 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
   const startTime = Date.now();
   const question = ctx.query ?? '';
 
-  if (!isNeo4jConnected()) {
-    return {
-      skillName: '知识检索',
-      status: 'error',
-      data: { error: 'Neo4j 未连接，无法检索知识库' },
-      tokenUsed: 0,
-      duration: (Date.now() - startTime) / 1000,
-    };
-  }
-
   try {
+    const graphifySnapshot = await ctx.services.graphify.getSnapshotStatus().catch(() => ({
+      ok: false,
+      exists: false,
+      snapshotId: null,
+      assetRoot: '',
+      nodeCount: 0,
+      edgeCount: 0,
+      recordCount: 0,
+      freshness: { status: 'missing' as const },
+    }));
+
+    if (graphifySnapshot.exists) {
+      try {
+        const [graphifyAsk, graphifyRecords] = await Promise.all([
+          ctx.services.graphify.ask({ question, format: 'structured', topN: 5 }),
+          ctx.services.graphify.searchRecords({ query: question, topN: 10 }),
+        ]);
+
+        const graphifyAnswer = normalizeStructuredGraphifyAnswer(graphifyAsk.answer);
+        const resultCount = graphifyAnswer.records.length + graphifyAnswer.nodes.length + graphifyRecords.records.length;
+
+        return {
+          skillName: '知识检索',
+          status: 'success',
+          data: {
+            question,
+            resultCount,
+            source: 'graphify',
+            graphifyAnswer,
+            recordResults: graphifyRecords.records,
+            graphifySources: graphifyAnswer.sources,
+            snapshotId: graphifyAsk.snapshotId ?? graphifySnapshot.snapshotId,
+            freshness: graphifyAsk.freshness ?? graphifySnapshot.freshness,
+            fallbackUsed: false,
+          },
+          tokenUsed: 0,
+          duration: (Date.now() - startTime) / 1000,
+        };
+      } catch (graphifyError) {
+        console.warn('[Skill:knowledgeRetrieve] Graphify query failed, falling back to Neo4j:', (graphifyError as Error).message);
+      }
+    }
+
+    if (!isNeo4jConnected()) {
+      return {
+        skillName: '知识检索',
+        status: 'success',
+        data: {
+          question,
+          resultCount: 0,
+          source: 'empty',
+          entityResults: [],
+          chunkResults: [],
+          keywords: [],
+          snapshotId: graphifySnapshot.snapshotId,
+          freshness: graphifySnapshot.freshness,
+          fallbackUsed: false,
+        },
+        tokenUsed: 0,
+        duration: (Date.now() - startTime) / 1000,
+      };
+    }
+
     const keywords = extractKeywords(question);
     console.log(`[Skill:knowledgeRetrieve] Keywords: [${keywords.join(', ')}]`);
 
-    // Channel 1: keyword search on Entity nodes
     let entityResults: Record<string, unknown>[] = [];
     if (keywords.length > 0) {
-      const kwResults = await queryByKeywords(keywords);
-      if (kwResults && kwResults.length > 0) {
-        entityResults = kwResults as unknown as Record<string, unknown>[];
+      const keywordResults = await queryByKeywords(keywords);
+      if (keywordResults && keywordResults.length > 0) {
+        entityResults = keywordResults as unknown as Record<string, unknown>[];
         console.log(`[Skill:knowledgeRetrieve] Keyword channel: ${entityResults.length} entities`);
       }
     }
@@ -64,7 +116,7 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
     if (entityResults.length === 0) {
       const fragments = question.replace(/[？?。，！!,.]/g, '').trim();
       const twoCharKeywords: string[] = [];
-      for (let i = 0; i < fragments.length - 1; i++) {
+      for (let i = 0; i < fragments.length - 1; i += 1) {
         twoCharKeywords.push(fragments.slice(i, i + 2));
       }
       const uniqueFragments = [...new Set(twoCharKeywords)].slice(0, 10);
@@ -77,7 +129,6 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
       }
     }
 
-    // Channel 2: vector search on Chunk nodes
     let chunkResults: Array<{ text: string; source: string; score: number }> = [];
     let embeddingTokenUsed = 0;
     try {
@@ -85,18 +136,18 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
       embeddingTokenUsed = Math.ceil(question.length / 2);
       const vectorHits = await vectorSearch(queryEmbedding, 5);
       if (vectorHits.length > 0) {
-        chunkResults = vectorHits.map((h) => ({
-          text: h.text,
-          source: h.source,
-          score: h.score,
+        chunkResults = vectorHits.map((hit) => ({
+          text: hit.text,
+          source: hit.source,
+          score: hit.score,
         }));
         console.log(`[Skill:knowledgeRetrieve] Vector channel: ${chunkResults.length} chunks (top score: ${chunkResults[0].score.toFixed(3)})`);
       }
-    } catch (vecErr) {
-      console.warn('[Skill:knowledgeRetrieve] Vector search skipped:', (vecErr as Error).message);
+    } catch (vectorError) {
+      console.warn('[Skill:knowledgeRetrieve] Vector search skipped:', (vectorError as Error).message);
     }
 
-    const totalResults = entityResults.length + chunkResults.length;
+    const resultCount = entityResults.length + chunkResults.length;
     const duration = (Date.now() - startTime) / 1000;
     console.log(`[Skill:knowledgeRetrieve] Done in ${duration.toFixed(2)}s — ${entityResults.length} entities + ${chunkResults.length} chunks`);
 
@@ -107,9 +158,12 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
         question,
         entityResults,
         chunkResults,
-        resultCount: totalResults,
-        source: chunkResults.length > 0 ? 'hybrid' : 'keywords',
+        resultCount,
+        source: chunkResults.length > 0 ? 'neo4j-hybrid' : 'neo4j-keywords',
         keywords,
+        snapshotId: graphifySnapshot.snapshotId,
+        freshness: graphifySnapshot.freshness,
+        fallbackUsed: true,
       },
       tokenUsed: embeddingTokenUsed,
       duration,
@@ -124,4 +178,28 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
       duration: (Date.now() - startTime) / 1000,
     };
   }
+}
+
+function normalizeStructuredGraphifyAnswer(answer: unknown): {
+  question: string;
+  records: Array<Record<string, unknown>>;
+  nodes: Array<Record<string, unknown>>;
+  sources: string[];
+} {
+  if (!answer || typeof answer !== 'object') {
+    return {
+      question: '',
+      records: [],
+      nodes: [],
+      sources: [],
+    };
+  }
+
+  const payload = answer as Record<string, unknown>;
+  return {
+    question: String(payload.question ?? ''),
+    records: Array.isArray(payload.records) ? payload.records as Array<Record<string, unknown>> : [],
+    nodes: Array.isArray(payload.nodes) ? payload.nodes as Array<Record<string, unknown>> : [],
+    sources: Array.isArray(payload.sources) ? payload.sources.filter((item): item is string => typeof item === 'string') : [],
+  };
 }

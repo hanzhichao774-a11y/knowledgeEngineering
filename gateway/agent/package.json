@@ -1,0 +1,26 @@
+{
+  "name": "bizagentos-gateway-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:sdk": "npm --prefix ../package/open-agent-sdk-typescript install && npm --prefix ../package/open-agent-sdk-typescript run build",
+    "predev": "npm run prepare:sdk",
+    "prebuild": "npm run prepare:sdk",
+    "prestart": "npm run prepare:sdk",
+    "pretest": "npm run prepare:sdk",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@codeany/open-agent-sdk": "file:../package/open-agent-sdk-typescript",
+    "fastify": "^5.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

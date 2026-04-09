@@ -1,3 +1,6 @@
+import type { GatewayClientLike } from '../clients/GatewayClient.js';
+import type { GraphifyClientLike } from '../clients/GraphifyClient.js';
+
 export interface AgentConfig {
   id: string;
   name: string;
@@ -25,13 +28,20 @@ export interface SkillResult {
 
 export type TaskIntent = 'ingest' | 'query';
 
+export interface AgentServices {
+  gateway: GatewayClientLike;
+  graphify: GraphifyClientLike;
+}
+
 export interface ExecutionContext {
   taskId: string;
   intent: TaskIntent;
+  workspaceId: string;
   query?: string;
   fileId?: string;
   filePath?: string;
   previousResults: SkillResult[];
+  services: AgentServices;
   onProgress: (msg: AgentMessage) => void;
   onStepComplete: (stepIndex: number, result: SkillResult) => void;
 }

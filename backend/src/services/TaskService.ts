@@ -1,10 +1,11 @@
 import { randomUUID } from 'crypto';
 import { broadcast } from '../websocket/handler.js';
-
 import { ManagerAgent } from '../agents/ManagerAgent.js';
 import { storeGraphData } from './GraphService.js';
 import { getFilePath } from '../routes/upload.js';
 import type { AgentMessage, SkillResult, ExecutionContext, TaskIntent } from '../agents/types.js';
+import { GatewayClient, type GatewayClientLike } from '../clients/GatewayClient.js';
+import { GraphifyClient, type GraphifyClientLike } from '../clients/GraphifyClient.js';
 
 export interface Step {
   name: string;
@@ -45,6 +46,11 @@ export interface TaskResult {
   graphNodeCount: number;
   graphEdgeCount: number;
   answer?: string;
+  answerMeta?: {
+    source?: string;
+    snapshotId?: string | null;
+    freshness?: unknown;
+  };
 }
 
 const tasks = new Map<string, Task>();
@@ -73,7 +79,20 @@ const SKILL_ICONS: Record<string, string> = {
 };
 
 export class TaskService {
-  private manager = new ManagerAgent();
+  private readonly gatewayClient: GatewayClientLike;
+  private readonly graphifyClient: GraphifyClientLike;
+  private readonly workspaceId: string;
+  private readonly manager = new ManagerAgent();
+
+  constructor(options: {
+    gatewayClient?: GatewayClientLike;
+    graphifyClient?: GraphifyClientLike;
+    workspaceId?: string;
+  } = {}) {
+    this.gatewayClient = options.gatewayClient ?? new GatewayClient();
+    this.graphifyClient = options.graphifyClient ?? new GraphifyClient();
+    this.workspaceId = options.workspaceId ?? 'default';
+  }
 
   listTasks() {
     return Array.from(tasks.values()).map(({ result, ...rest }) => rest);
@@ -90,8 +109,8 @@ export class TaskService {
   async createTask(title: string, description?: string, fileId?: string): Promise<Task> {
     const hasFile = !!fileId;
     const initialSteps = hasFile
-      ? INGEST_STEPS.map((s) => ({ ...s }))
-      : QUERY_STEPS.map((s) => ({ ...s }));
+      ? INGEST_STEPS.map((step) => ({ ...step }))
+      : QUERY_STEPS.map((step) => ({ ...step }));
 
     const task: Task = {
       id: randomUUID(),
@@ -107,8 +126,8 @@ export class TaskService {
 
     broadcast({ type: 'task.created', task: { ...task, result: undefined } });
 
-    this.executeTask(task.id).catch((err) => {
-      console.error(`Task ${task.id} execution failed:`, err);
+    this.executeTask(task.id).catch((error) => {
+      console.error(`Task ${task.id} execution failed:`, error);
       task.status = 'failed';
       broadcast({ type: 'task.status', taskId: task.id, status: 'failed' });
     });
@@ -129,10 +148,15 @@ export class TaskService {
     const ctx: ExecutionContext = {
       taskId,
       intent: task.fileId ? 'ingest' : 'query',
+      workspaceId: this.workspaceId,
       query: task.title,
       fileId: task.fileId,
       filePath,
       previousResults: [],
+      services: {
+        gateway: this.gatewayClient,
+        graphify: this.graphifyClient,
+      },
       onProgress: (msg: AgentMessage) => {
         const stepIndex = msg.metadata?.stepIndex as number | undefined;
         if (stepIndex !== undefined && msg.content.includes('开始执行')) {
@@ -145,12 +169,12 @@ export class TaskService {
         const skillName = msg.metadata?.skillName as string | undefined;
         const agentStatus = stepIndex !== undefined && skillName
           ? {
-              skill: skillName,
-              skillIcon: SKILL_ICONS[skillName] || '⚙️',
-              tokenUsed: 0,
-              tokenLimit: 8000,
-              status: (msg.content.includes('完成') || msg.content.includes('失败') ? 'done' : 'running') as 'running' | 'done',
-            }
+            skill: skillName,
+            skillIcon: SKILL_ICONS[skillName] || '⚙️',
+            tokenUsed: 0,
+            tokenLimit: 8000,
+            status: (msg.content.includes('完成') || msg.content.includes('失败') ? 'done' : 'running') as 'running' | 'done',
+          }
           : undefined;
 
         broadcast({
@@ -178,12 +202,11 @@ export class TaskService {
         totalInputTokens += result.tokenUsed;
         totalOutputTokens += Math.floor(result.tokenUsed * 0.4);
 
-        const elapsed = formatElapsed(Date.now() - startTime);
         task.cost = {
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           estimatedCost: parseFloat(((totalInputTokens + totalOutputTokens) * 0.00003).toFixed(2)),
-          elapsed,
+          elapsed: formatElapsed(Date.now() - startTime),
         };
 
         broadcast({
@@ -205,24 +228,24 @@ export class TaskService {
     task.intent = actualIntent;
 
     if (actualIntent === 'query' && task.steps.length === 5) {
-      task.steps = QUERY_STEPS.map((s) => ({ ...s }));
+      task.steps = QUERY_STEPS.map((step) => ({ ...step }));
       broadcast({ type: 'task.steps.reset', taskId, steps: task.steps });
     }
 
-    const hasError = ctx.previousResults.some((r) => r.status === 'error');
+    const hasError = ctx.previousResults.some((result) => result.status === 'error');
     const failedSteps = task.steps
-      .filter((s) => s.status === 'error')
-      .map((s) => s.name);
-    const completedSteps = task.steps.filter((s) => s.status === 'done');
+      .filter((step) => step.status === 'error')
+      .map((step) => step.name);
+    const completedSteps = task.steps.filter((step) => step.status === 'done');
 
-    task.steps.forEach((s) => {
-      if (s.status === 'pending') s.status = 'skipped';
+    task.steps.forEach((step) => {
+      if (step.status === 'pending') step.status = 'skipped';
     });
 
     task.status = hasError ? 'failed' : 'completed';
 
     if (actualIntent === 'query') {
-      this.finalizeQueryTask(task, ctx, hasError, failedSteps, completedSteps);
+      this.finalizeQueryTask(task, ctx, hasError, failedSteps);
     } else {
       this.finalizeIngestTask(task, ctx, hasError, failedSteps, completedSteps);
     }
@@ -235,10 +258,9 @@ export class TaskService {
     ctx: ExecutionContext,
     hasError: boolean,
     failedSteps: string[],
-    completedSteps: Step[],
   ) {
-    const answerResult = ctx.previousResults.find((r) => r.skillName === '答案生成');
-    const retrieveResult = ctx.previousResults.find((r) => r.skillName === '知识检索');
+    const answerResult = ctx.previousResults.find((result) => result.skillName === '答案生成');
+    const retrieveResult = ctx.previousResults.find((result) => result.skillName === '知识检索');
     const answerData = answerResult?.status === 'success' ? answerResult.data as Record<string, unknown> : undefined;
     const retrieveData = retrieveResult?.status === 'success' ? retrieveResult.data as Record<string, unknown> : undefined;
 
@@ -252,6 +274,11 @@ export class TaskService {
       graphNodeCount: 0,
       graphEdgeCount: 0,
       answer,
+      answerMeta: {
+        source: retrieveData?.source as string | undefined,
+        snapshotId: retrieveData?.snapshotId as string | null | undefined,
+        freshness: retrieveData?.freshness,
+      },
     };
 
     if (hasError) {
@@ -267,23 +294,26 @@ export class TaskService {
           timestamp: new Date().toTimeString().slice(0, 5),
         },
       });
-    } else {
-      broadcast({
-        type: 'agent.message',
-        message: {
-          id: `msg-answer-${Date.now()}`,
-          role: 'assistant',
-          name: '知识助手',
-          content: answer,
-          timestamp: new Date().toTimeString().slice(0, 5),
-          metadata: {
-            isAnswer: true,
-            basedOnResults,
-            source: (retrieveData?.source as string) ?? 'unknown',
-          },
-        },
-      });
+      return;
     }
+
+    broadcast({
+      type: 'agent.message',
+      message: {
+        id: `msg-answer-${Date.now()}`,
+        role: 'assistant',
+        name: '知识助手',
+        content: answer,
+        timestamp: new Date().toTimeString().slice(0, 5),
+        metadata: {
+          isAnswer: true,
+          basedOnResults,
+          source: (retrieveData?.source as string) ?? 'unknown',
+          snapshotId: retrieveData?.snapshotId,
+          freshness: retrieveData?.freshness,
+        },
+      },
+    });
   }
 
   private finalizeIngestTask(
@@ -293,10 +323,10 @@ export class TaskService {
     failedSteps: string[],
     completedSteps: Step[],
   ) {
-    const docResult = ctx.previousResults.find((r) => r.skillName === '多模态文档解析');
-    const ontologyResult = ctx.previousResults.find((r) => r.skillName === '本体提取');
-    const schemaResult = ctx.previousResults.find((r) => r.skillName === 'Schema 构建');
-    const graphResult = ctx.previousResults.find((r) => r.skillName === '知识图谱生成');
+    const docResult = ctx.previousResults.find((result) => result.skillName === '多模态文档解析');
+    const ontologyResult = ctx.previousResults.find((result) => result.skillName === '本体提取');
+    const schemaResult = ctx.previousResults.find((result) => result.skillName === 'Schema 构建');
+    const graphResult = ctx.previousResults.find((result) => result.skillName === '知识图谱生成');
 
     const ontologyData = ontologyResult?.status === 'success' ? ontologyResult.data as Record<string, unknown> : undefined;
     const schemaData = schemaResult?.status === 'success' ? schemaResult.data as Record<string, unknown> : undefined;
@@ -341,22 +371,35 @@ export class TaskService {
           timestamp: new Date().toTimeString().slice(0, 5),
         },
       });
-    } else {
-      broadcast({
-        type: 'agent.message',
-        message: {
-          id: `msg-${Date.now()}`,
-          role: 'manager',
-          name: '管理智能体',
-          content: `<p>✅ <strong>知识工程任务已完成</strong></p>
+      return;
+    }
+
+    this.refreshKnowledgeBase(ctx).catch((error) => {
+      console.warn('[TaskService] Graphify refresh failed:', error instanceof Error ? error.message : String(error));
+    });
+
+    broadcast({
+      type: 'agent.message',
+      message: {
+        id: `msg-${Date.now()}`,
+        role: 'manager',
+        name: '管理智能体',
+        content: `<p>✅ <strong>知识工程任务已完成</strong></p>
 <p>知识工程数字员工 #KE-01 已完成全部 ${task.steps.length} 个步骤：</p>
 <p>• 文档解析 → 本体提取 → Schema 构建 → 图数据库写入 → 知识图谱生成</p>
 <p>📊 产出：${task.result.ontology.classCount ?? 0} 个本体类、${task.result.ontology.entityCount ?? 0} 个实体、${task.result.ontology.relationCount ?? 0} 条关系</p>
 <p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
-          timestamp: new Date().toTimeString().slice(0, 5),
-        },
-      });
-    }
+        timestamp: new Date().toTimeString().slice(0, 5),
+      },
+    });
+  }
+
+  private async refreshKnowledgeBase(ctx: ExecutionContext): Promise<void> {
+    await this.graphifyClient.rebuild({
+      mode: 'full',
+      changedFiles: ctx.filePath ? [ctx.filePath] : [],
+      reason: 'post_ingest_refresh',
+    });
   }
 }
 

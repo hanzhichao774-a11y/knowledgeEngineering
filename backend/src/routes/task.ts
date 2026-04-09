@@ -1,8 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { TaskService } from '../services/TaskService.js';
 
-export const taskRoutes: FastifyPluginAsync = async (app) => {
-  const svc = new TaskService();
+interface TaskRouteOptions {
+  taskService: TaskService;
+}
+
+export const taskRoutes: FastifyPluginAsync<TaskRouteOptions> = async (app, options) => {
+  const svc = options.taskService;
 
   app.get('/tasks', async () => {
     return svc.listTasks();

@@ -1,8 +1,6 @@
 import type { AgentConfig, ExecutionContext, TaskIntent } from './types.js';
 import { KEWorker } from './KEWorker.js';
 import { QueryWorker } from './QueryWorker.js';
-import { isNeo4jConnected } from '../db/neo4j.js';
-import { callLLM } from '../services/LLMService.js';
 
 export class ManagerAgent {
   config: AgentConfig = {
@@ -55,23 +53,17 @@ export class ManagerAgent {
       return 'ingest';
     }
 
-    if (!isNeo4jConnected()) {
-      ctx.onProgress({
-        agentId: this.config.id,
-        role: 'manager',
-        content: 'Neo4j 未连接，无法检索知识库。将按知识入库流程处理。',
-        timestamp: new Date().toISOString(),
-      });
-      return 'ingest';
-    }
-
     try {
-      const { text } = await callLLM(
-        '你是一个任务分类器。判断用户输入是"知识入库"（处理文档、构建图谱等）还是"知识查询"（基于已有知识回答问题）。只回复 ingest 或 query，不要其他内容。',
+      const result = await ctx.services.gateway.classifyIntent({
+        taskId: ctx.taskId,
+        workspaceId: ctx.workspaceId,
         query,
-      );
-      const result = text.trim().toLowerCase();
-      const intent: TaskIntent = result.includes('ingest') ? 'ingest' : 'query';
+        hasFile: Boolean(ctx.fileId || ctx.filePath),
+        context: {
+          source: 'backend.manager',
+        },
+      });
+      const intent: TaskIntent = result.intent;
 
       ctx.onProgress({
         agentId: this.config.id,

@@ -65,7 +65,8 @@ export interface OntologyClass {
 
 export interface OntologyEntity {
   name: string;
-  class: string;
+  class?: string;
+  type?: string;
   desc: string;
 }
 
@@ -91,6 +92,7 @@ export interface OntologyResult {
   classCount?: number;
   entityCount?: number;
   relationCount?: number;
+  ruleCount?: number;
   attrCount?: number;
 }
 
