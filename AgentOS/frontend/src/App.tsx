@@ -11,6 +11,7 @@ import {
   graphNodes,
   type ChatMessage,
   type Metric,
+  type ParticipantAgent,
   type ProjectSummary,
   type Tone,
   type ViewKey,
@@ -32,6 +33,13 @@ interface ProjectChatResponse {
   message: ChatMessage;
 }
 
+interface ProjectConversation {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: string;
+}
+
 function toneClass(tone: Tone) {
   return `is-${tone}`;
 }
@@ -50,6 +58,52 @@ function formatMessageTime(value: string) {
     minute: '2-digit',
     hour12: false,
   }).format(date);
+}
+
+function stripMarkdown(value: string) {
+  return value
+    .replace(/`{1,3}[^`]*`{1,3}/g, ' ')
+    .replace(/[*_>#-]/g, ' ')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function deriveConversationTitle(question: string) {
+  const cleaned = stripMarkdown(question);
+  if (!cleaned) return '新对话';
+  return cleaned.length > 18 ? `${cleaned.slice(0, 18)}...` : cleaned;
+}
+
+function getDefaultConversationId(projectId: string) {
+  return `${projectId}-conversation-default`;
+}
+
+function buildInitialConversation(project: ProjectSummary): ProjectConversation {
+  const lastMessage = project.chat.at(-1);
+  return {
+    id: getDefaultConversationId(project.id),
+    title: '当前知识库问答',
+    messages: project.chat,
+    updatedAt: lastMessage?.createdAt ?? project.knowledgeBase.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+function buildEmptyConversation(projectId: string): ProjectConversation {
+  const now = new Date().toISOString();
+  return {
+    id: `${projectId}-conversation-${Date.now()}`,
+    title: '新对话',
+    messages: [],
+    updatedAt: now,
+  };
+}
+
+function buildConversationPreview(conversation: ProjectConversation) {
+  const lastMessage = conversation.messages.at(-1);
+  if (!lastMessage) return '等待输入第一个问题';
+  const cleaned = stripMarkdown(lastMessage.content);
+  return cleaned.length > 40 ? `${cleaned.slice(0, 40)}...` : cleaned;
 }
 
 function MetricRow({ metrics }: { metrics: Metric[] }) {
@@ -535,68 +589,93 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 
 function ProjectView({
   project,
-  messages,
+  conversations,
+  selectedConversationId,
   draft,
   onDraftChange,
   onSend,
+  onSelectConversation,
+  onCreateConversation,
   isSending,
   chatError,
 }: {
   project: ProjectSummary;
-  messages: ChatMessage[];
+  conversations: ProjectConversation[];
+  selectedConversationId: string | null;
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: (question?: string) => void;
+  onSelectConversation: (conversationId: string) => void;
+  onCreateConversation: () => void;
   isSending: boolean;
   chatError: string | null;
 }) {
-  return (
-    <div className="view chat-page-layout">
-      <div className="chat-summary-grid">
-        {project.stats.map((stat) => (
-          <article key={stat.label} className="chat-summary-card">
-            <p>{stat.label}</p>
-            <strong>{stat.value}</strong>
-          </article>
-        ))}
-      </div>
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId)
+    ?? conversations[0]
+    ?? null;
+  const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(project.participantAgents[0]?.id ?? null);
 
-      <div className="warroom-layout">
-        <section className="surface-card">
-          <div className="section-title">
+  return (
+    <div className="view project-page-view">
+      <div className="project-workbench">
+        <section className="surface-card conversation-sidebar">
+          <div className="conversation-sidebar-header">
             <div>
-              <h3>项目侧栏</h3>
-              <p>这里展示当前项目、知识快照和挂载知识库的核心上下文。</p>
+              <h3>历史对话</h3>
+              <p>{project.name}</p>
             </div>
+            <button className="button-secondary" type="button" onClick={onCreateConversation}>
+              新对话
+            </button>
           </div>
 
-          <div className="list-stack">
-            {project.memory.map((memory) => (
-              <div key={memory} className="list-item">
-                <strong>{project.shortName}</strong>
-                <p>{memory}</p>
-              </div>
+          <div className="conversation-list">
+            {conversations.map((conversation) => (
+              <button
+                key={conversation.id}
+                className={`conversation-item ${conversation.id === selectedConversation?.id ? 'active' : ''}`}
+                type="button"
+                onClick={() => onSelectConversation(conversation.id)}
+              >
+                <div className="conversation-item-header">
+                  <strong>{conversation.title}</strong>
+                  <span>{formatMessageTime(conversation.updatedAt)}</span>
+                </div>
+                <p>{buildConversationPreview(conversation)}</p>
+              </button>
             ))}
           </div>
 
-          <div className="surface-subcard">
-            <h4>当前挂载知识库</h4>
-            <div className="tiny-kpi">
-              <div className="row"><span>名称</span><strong>{project.knowledgeBase.label}</strong></div>
-              <div className="row"><span>Freshness</span><strong>{project.knowledgeBase.freshness.status}</strong></div>
-              <div className="row"><span>Snapshot</span><strong>{project.knowledgeBase.snapshotId ?? '--'}</strong></div>
-              <div className="row"><span>节点 / 记录</span><strong>{project.knowledgeBase.nodeCount} / {project.knowledgeBase.recordCount}</strong></div>
+          <div className="conversation-sidebar-footer">
+            <div className="sidebar-kb-row">
+              <span>知识库</span>
+              <strong>{project.knowledgeBase.label}</strong>
+            </div>
+            <div className="sidebar-kb-row">
+              <span>Snapshot</span>
+              <strong>{project.knowledgeBase.snapshotId ?? '--'}</strong>
+            </div>
+            <div className="sidebar-kb-row">
+              <span>Freshness</span>
+              <strong>{project.knowledgeBase.freshness.status}</strong>
+            </div>
+            <div className="sidebar-kb-row">
+              <span>节点 / 记录</span>
+              <strong>{project.knowledgeBase.nodeCount} / {project.knowledgeBase.recordCount}</strong>
             </div>
           </div>
         </section>
 
-        <section className="surface-card">
-          <div className="section-title">
+        <section className="surface-card conversation-panel">
+          <div className="conversation-panel-header">
             <div>
-              <h3>项目群聊</h3>
-              <p>这里已经接了真实问答接口。提问后会直接调用后端，再由现成 graphify 知识库返回 Markdown 回答。</p>
+              <h3>{selectedConversation?.title ?? '新对话'}</h3>
+              <p>围绕当前挂载知识库提问，回答会保留 Markdown 结构和来源信息。</p>
             </div>
-            <span className="pill is-mint">当前话题：{project.focus}</span>
+            <div className="conversation-panel-meta">
+              <span className="pill is-mint">{project.knowledgeBase.label}</span>
+              <span className="pill">{project.knowledgeBase.freshness.status}</span>
+            </div>
           </div>
 
           <div className="suggestion-row">
@@ -614,9 +693,16 @@ function ProjectView({
           </div>
 
           <div className="chat-thread">
-            {messages.map((message) => (
-              <ChatBubble key={message.id} message={message} />
-            ))}
+            {selectedConversation && selectedConversation.messages.length > 0 ? (
+              selectedConversation.messages.map((message) => (
+                <ChatBubble key={message.id} message={message} />
+              ))
+            ) : (
+              <div className="conversation-empty">
+                <strong>新对话已创建</strong>
+                <p>从左侧选一个历史对话，或者直接在下方输入问题开始新的会话。</p>
+              </div>
+            )}
           </div>
 
           <div className="chat-composer">
@@ -631,7 +717,7 @@ function ProjectView({
             </label>
 
             <div className="composer-actions">
-              <span className="subtle">当前挂载知识库：{project.knowledgeBase.label}</span>
+              <span className="subtle">当前会话：{selectedConversation?.title ?? '新对话'}</span>
               <button
                 className="button"
                 type="button"
@@ -646,38 +732,73 @@ function ProjectView({
           </div>
         </section>
 
-        <section className="surface-card">
-          <div className="section-title">
+        <aside className="surface-card participant-rail">
+          <div className="participant-rail-header">
             <div>
-              <h3>右侧协同轨迹</h3>
-              <p>这里保留项目轨迹、当前建议动作和知识库状态说明。</p>
+              <h3>参与 Agent</h3>
+              <p>当前对话中已加入或可被唤醒的 Agent 列表。</p>
             </div>
+            <span className="pill is-blue">{project.participantAgents.length} 个</span>
           </div>
 
-          <div className="recommendation-grid compact">
-            {project.recommendations.map((item) => (
-              <div key={item.title} className="recommendation-card">
-                <h4>{item.title}</h4>
-                <p>{item.content}</p>
-              </div>
+          <div className="participant-grid">
+            {project.participantAgents.map((agent) => (
+              <ParticipantCard
+                key={agent.id}
+                agent={agent}
+                expanded={expandedParticipantId === agent.id}
+                onToggle={() => setExpandedParticipantId((current) => current === agent.id ? null : agent.id)}
+              />
             ))}
           </div>
-
-          <div className="timeline-list">
-            {project.timeline.map((item) => (
-              <div key={item.title} className="timeline-item">
-                <strong>{item.title}</strong>
-                <p>{item.content}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="footer-note">
-            当前项目标题是“北京热力集团智能体建设”，但项目页实际挂载的是一个现成知识库快照。等上传链路接通后，这里会切换成项目自己的知识资产。
-          </div>
-        </section>
+        </aside>
       </div>
     </div>
+  );
+}
+
+function ParticipantCard({
+  agent,
+  expanded,
+  onToggle,
+}: {
+  agent: ParticipantAgent;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <article className={`participant-card ${expanded ? 'expanded' : 'collapsed'}`}>
+      <button
+        className="participant-toggle"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        <span className="participant-name">{agent.name}</span>
+        <span className="participant-chevron">{expanded ? '−' : '+'}</span>
+      </button>
+
+      {expanded && (
+        <>
+          <div className="participant-card-header">
+            <div className={`participant-avatar ${toneClass(agent.statusTone)}`}>{agent.icon}</div>
+            <span className={`status-badge ${statusToneClass(agent.statusTone)}`}>{agent.status}</span>
+          </div>
+
+          <div className="participant-copy">
+            <h4>{agent.role}</h4>
+          </div>
+
+          <p className="participant-description">{agent.description}</p>
+
+          <div className="tag-row">
+            {agent.capabilities.map((capability) => (
+              <span key={capability} className={`tag ${toneClass(agent.statusTone)}`}>{capability}</span>
+            ))}
+          </div>
+        </>
+      )}
+    </article>
   );
 }
 
@@ -688,10 +809,11 @@ export default function App() {
   const [searchText, setSearchText] = useState('');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
-  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessage[]>>({});
+  const [projectConversations, setProjectConversations] = useState<Record<string, ProjectConversation[]>>({});
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Record<string, string>>({});
   const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
   const [chatErrors, setChatErrors] = useState<Record<string, string | null>>({});
-  const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
+  const [sendingConversationKey, setSendingConversationKey] = useState<string | null>(null);
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
 
   const loadProjects = async () => {
@@ -721,11 +843,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setChatThreads((current) => {
+    setProjectConversations((current) => {
       const next = { ...current };
       for (const project of projects) {
         if (!next[project.id]) {
-          next[project.id] = project.chat;
+          next[project.id] = [buildInitialConversation(project)];
+        }
+      }
+      return next;
+    });
+    setSelectedConversationIds((current) => {
+      const next = { ...current };
+      for (const project of projects) {
+        if (!next[project.id]) {
+          next[project.id] = getDefaultConversationId(project.id);
         }
       }
       return next;
@@ -737,7 +868,9 @@ export default function App() {
   const issueDistribution = buildIssueDistribution(projects);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
-  const selectedMessages = selectedProject ? (chatThreads[selectedProject.id] ?? selectedProject.chat) : [];
+  const selectedConversations = selectedProject ? (projectConversations[selectedProject.id] ?? [buildInitialConversation(selectedProject)]) : [];
+  const selectedConversationId = selectedProject ? (selectedConversationIds[selectedProject.id] ?? selectedConversations[0]?.id ?? null) : null;
+  const selectedConversation = selectedConversations.find((conversation) => conversation.id === selectedConversationId) ?? selectedConversations[0] ?? null;
 
   const visibleProjects = deferredSearchText
     ? projects.filter((project) => {
@@ -758,16 +891,55 @@ export default function App() {
     setActiveView('project');
   };
 
-  const updateDraft = (projectId: string, value: string) => {
+  const updateDraft = (projectId: string, conversationId: string | null, value: string) => {
+    if (!conversationId) return;
     setChatDrafts((current) => ({
       ...current,
-      [projectId]: value,
+      [`${projectId}:${conversationId}`]: value,
+    }));
+  };
+
+  const createConversation = (projectId: string) => {
+    const nextConversation = buildEmptyConversation(projectId);
+    setProjectConversations((current) => ({
+      ...current,
+      [projectId]: [nextConversation, ...(current[projectId] ?? [])],
+    }));
+    setSelectedConversationIds((current) => ({
+      ...current,
+      [projectId]: nextConversation.id,
+    }));
+    setChatErrors((current) => ({
+      ...current,
+      [`${projectId}:${nextConversation.id}`]: null,
+    }));
+  };
+
+  const selectConversation = (projectId: string, conversationId: string) => {
+    setSelectedConversationIds((current) => ({
+      ...current,
+      [projectId]: conversationId,
+    }));
+  };
+
+  const updateConversation = (
+    projectId: string,
+    conversationId: string,
+    updater: (conversation: ProjectConversation) => ProjectConversation,
+  ) => {
+    setProjectConversations((current) => ({
+      ...current,
+      [projectId]: (current[projectId] ?? []).map((conversation) =>
+        conversation.id === conversationId ? updater(conversation) : conversation,
+      ),
     }));
   };
 
   const sendQuestion = async (project: ProjectSummary, quickQuestion?: string) => {
-    const question = (quickQuestion ?? chatDrafts[project.id] ?? '').trim();
-    if (!question || sendingProjectId === project.id) return;
+    const conversationId = selectedConversationIds[project.id] ?? getDefaultConversationId(project.id);
+    const draftKey = `${project.id}:${conversationId}`;
+    const question = (quickQuestion ?? chatDrafts[draftKey] ?? '').trim();
+    if (!question || sendingConversationKey === draftKey) return;
 
     const now = new Date().toISOString();
     const userMessage: ChatMessage = {
@@ -779,13 +951,15 @@ export default function App() {
       createdAt: now,
     };
 
-    setChatThreads((current) => ({
-      ...current,
-      [project.id]: [...(current[project.id] ?? project.chat), userMessage],
+    updateConversation(project.id, conversationId, (conversation) => ({
+      ...conversation,
+      title: conversation.messages.length === 0 ? deriveConversationTitle(question) : conversation.title,
+      messages: [...conversation.messages, userMessage],
+      updatedAt: now,
     }));
-    setChatErrors((current) => ({ ...current, [project.id]: null }));
-    setChatDrafts((current) => ({ ...current, [project.id]: '' }));
-    setSendingProjectId(project.id);
+    setChatErrors((current) => ({ ...current, [draftKey]: null }));
+    setChatDrafts((current) => ({ ...current, [draftKey]: '' }));
+    setSendingConversationKey(draftKey);
 
     try {
       const response = await fetch(`/api/projects/${project.id}/chat`, {
@@ -802,9 +976,10 @@ export default function App() {
       }
 
       const payload = (await response.json()) as ProjectChatResponse;
-      setChatThreads((current) => ({
-        ...current,
-        [project.id]: [...(current[project.id] ?? project.chat), payload.message],
+      updateConversation(project.id, conversationId, (conversation) => ({
+        ...conversation,
+        messages: [...conversation.messages, payload.message],
+        updatedAt: payload.message.createdAt,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : '问答失败';
@@ -817,13 +992,14 @@ export default function App() {
         createdAt: new Date().toISOString(),
       };
 
-      setChatThreads((current) => ({
-        ...current,
-        [project.id]: [...(current[project.id] ?? project.chat), errorMessage],
+      updateConversation(project.id, conversationId, (conversation) => ({
+        ...conversation,
+        messages: [...conversation.messages, errorMessage],
+        updatedAt: errorMessage.createdAt,
       }));
-      setChatErrors((current) => ({ ...current, [project.id]: message }));
+      setChatErrors((current) => ({ ...current, [draftKey]: message }));
     } finally {
-      setSendingProjectId(null);
+      setSendingConversationKey(null);
     }
   };
 
@@ -961,7 +1137,7 @@ export default function App() {
           onSearchChange={setSearchText}
         />
 
-        <section className="content-shell">
+        <section className={`content-shell ${activeView === 'project' ? 'project-content-shell' : ''}`}>
           {isLoadingProjects && projects.length === 0 && (
             <section className="surface-card empty-state">
               <div className="section-title">
@@ -1022,12 +1198,15 @@ export default function App() {
           {activeView === 'project' && selectedProject && (
             <ProjectView
               project={selectedProject}
-              messages={selectedMessages}
-              draft={chatDrafts[selectedProject.id] ?? ''}
-              onDraftChange={(value) => updateDraft(selectedProject.id, value)}
+              conversations={selectedConversations}
+              selectedConversationId={selectedConversation?.id ?? null}
+              draft={selectedConversation ? (chatDrafts[`${selectedProject.id}:${selectedConversation.id}`] ?? '') : ''}
+              onDraftChange={(value) => updateDraft(selectedProject.id, selectedConversation?.id ?? null, value)}
               onSend={(question) => void sendQuestion(selectedProject, question)}
-              isSending={sendingProjectId === selectedProject.id}
-              chatError={chatErrors[selectedProject.id] ?? null}
+              onSelectConversation={(conversationId) => selectConversation(selectedProject.id, conversationId)}
+              onCreateConversation={() => createConversation(selectedProject.id)}
+              isSending={selectedConversation ? sendingConversationKey === `${selectedProject.id}:${selectedConversation.id}` : false}
+              chatError={selectedConversation ? (chatErrors[`${selectedProject.id}:${selectedConversation.id}`] ?? null) : null}
             />
           )}
           {activeView === 'project' && !selectedProject && !isLoadingProjects && (

@@ -45,6 +45,17 @@ export interface KnowledgeBaseSummary {
   assetRoot?: string;
 }
 
+export interface ParticipantAgent {
+  id: string;
+  icon: string;
+  name: string;
+  role: string;
+  status: string;
+  statusTone: Tone;
+  description: string;
+  capabilities: string[];
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -65,6 +76,7 @@ export interface ProjectSummary {
   sizeLabel: string;
   suggestedQuestions: string[];
   knowledgeBase: KnowledgeBaseSummary;
+  participantAgents: ParticipantAgent[];
 }
 
 export interface ProjectRecord {
@@ -155,6 +167,48 @@ export function buildProjectSummary(project: ProjectRecord, snapshot: GraphifySn
       recordCount: snapshot.recordCount,
       assetRoot: snapshot.assetRoot,
     },
+    participantAgents: [
+      {
+        id: 'project-agent',
+        icon: '项',
+        name: 'Project Agent',
+        role: '当前对话主持与任务编排',
+        status: '主持中',
+        statusTone: 'blue',
+        description: '负责接收问题、协调其他 Agent、汇总回答并把结果回收到当前会话。',
+        capabilities: ['会话管理', '任务编排', '上下文汇总'],
+      },
+      {
+        id: 'knowledge-agent',
+        icon: '知',
+        name: '知识工程 Agent',
+        role: '知识库检索与证据整理',
+        status: '已参与',
+        statusTone: 'mint',
+        description: '围绕 graphify 快照做结构化检索、记录命中和来源整理。',
+        capabilities: ['记录检索', '来源追踪', '知识快照'],
+      },
+      {
+        id: 'analysis-agent',
+        icon: '析',
+        name: 'Analysis Agent',
+        role: '问题分析与追问建议',
+        status: '待唤醒',
+        statusTone: 'amber',
+        description: '在问题需要归因、对比和进一步拆解时进入当前对话。',
+        capabilities: ['归因分析', '问题拆解', '追问建议'],
+      },
+      {
+        id: 'manager-agent',
+        icon: '管',
+        name: 'Manager Agent',
+        role: '审计与多 Agent 协同监控',
+        status: '监控中',
+        statusTone: 'rose',
+        description: '负责从管理视角监控当前项目对话的治理边界和协同状态。',
+        capabilities: ['治理审计', '冲突协调', '状态监控'],
+      },
+    ],
     stats: [
       { label: '知识状态', value: knowledgeStatus },
       { label: '知识节点', value: String(snapshot.nodeCount) },

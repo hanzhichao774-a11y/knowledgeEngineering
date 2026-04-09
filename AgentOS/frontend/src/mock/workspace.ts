@@ -43,6 +43,17 @@ export interface KnowledgeBaseSummary {
   assetRoot?: string;
 }
 
+export interface ParticipantAgent {
+  id: string;
+  icon: string;
+  name: string;
+  role: string;
+  status: string;
+  statusTone: Tone;
+  description: string;
+  capabilities: string[];
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -63,6 +74,7 @@ export interface ProjectSummary {
   sizeLabel: string;
   suggestedQuestions: string[];
   knowledgeBase: KnowledgeBaseSummary;
+  participantAgents: ParticipantAgent[];
 }
 
 const documentExtensions = new Set(['pdf', 'doc', 'docx', 'md', 'txt']);
