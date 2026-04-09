@@ -60,6 +60,10 @@ button {
   align-items: start;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .sidebar {
   position: sticky;
   top: 18px;
@@ -220,6 +224,14 @@ button {
 
 .nav-subitem.create {
   color: var(--mint-deep);
+}
+
+.nav-empty {
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .sidebar-footer {
@@ -592,6 +604,10 @@ button {
   justify-content: center;
   align-items: center;
   text-align: center;
+}
+
+.empty-state {
+  min-height: 220px;
 }
 
 .card-avatar {

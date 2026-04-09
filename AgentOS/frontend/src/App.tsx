@@ -1,13 +1,12 @@
-import { useDeferredValue, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import {
   agents,
+  buildIssueDistribution,
+  buildOverviewMetrics,
+  buildProjectAlerts,
   graphAssets,
   graphMetrics,
   graphNodes,
-  issueDistribution,
-  overviewMetrics,
-  projectAlerts,
-  projects,
   type Metric,
   type ProjectSummary,
   type Tone,
@@ -20,14 +19,16 @@ interface Segment {
   active?: boolean;
 }
 
+interface ProjectListResponse {
+  projects: ProjectSummary[];
+}
+
 function toneClass(tone: Tone) {
   return `is-${tone}`;
 }
 
-function statusToneClass(status: ProjectSummary['status']) {
-  if (status === '高关注') return 'is-rose';
-  if (status === '跟踪中') return 'is-amber';
-  return 'is-mint';
+function statusToneClass(tone: Tone) {
+  return `is-${tone}`;
 }
 
 function MetricRow({ metrics }: { metrics: Metric[] }) {
@@ -87,7 +88,7 @@ function Topbar({
           </svg>
           <input
             type="text"
-            placeholder="搜索项目、Agent、任务..."
+            placeholder="搜索项目、文件、Agent..."
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
           />
@@ -97,15 +98,28 @@ function Topbar({
   );
 }
 
-function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
+function OverviewView({
+  metrics,
+  hasProjects,
+  openProjects,
+  openGraph,
+  openAgents,
+  openLatestProject,
+  refreshProjects,
+  isLoading,
+}: {
+  metrics: Metric[];
+  hasProjects: boolean;
   openProjects: () => void;
   openGraph: () => void;
   openAgents: () => void;
-  openProject: (projectId: string) => void;
+  openLatestProject: () => void;
+  refreshProjects: () => void;
+  isLoading: boolean;
 }) {
   return (
     <div className="view">
-      <MetricRow metrics={overviewMetrics} />
+      <MetricRow metrics={metrics} />
 
       <div className="overview-grid">
         <section className="surface-card">
@@ -121,21 +135,21 @@ function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
             <div className="stage-step">
               <div>
                 <strong>看全局项目态势</strong>
-                <span className="mini-stat">项目数、活跃度、风险等级、系统负载</span>
+                <span className="mini-stat">项目数量、知识库状态、可问答情况、系统负载</span>
               </div>
               <span className="step-index">1</span>
             </div>
             <div className="stage-step">
               <div>
                 <strong>判断去哪一层处理问题</strong>
-                <span className="mini-stat">数据问题去数据中心，项目问题去项目管理，再进入具体项目页</span>
+                <span className="mini-stat">文件接入去数据中心，项目列表去项目管理，具体问答去项目页</span>
               </div>
               <span className="step-index">2</span>
             </div>
             <div className="stage-step">
               <div>
-                <strong>不处理具体业务细节</strong>
-                <span className="mini-stat">具体任务拆解、证据链和群聊协同都放在 Project Agent 页面</span>
+                <strong>项目列表来自后端</strong>
+                <span className="mini-stat">当前项目目录由 Agent OS API 提供，不再使用前端本地 mock 项目数据</span>
               </div>
               <span className="step-index">3</span>
             </div>
@@ -144,7 +158,13 @@ function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
           <div className="quick-links">
             <button className="button" type="button" onClick={openProjects}>进入项目管理</button>
             <button className="button-secondary" type="button" onClick={openGraph}>进入数据中心</button>
-            <button className="button-secondary" type="button" onClick={() => openProject(projects[0].id)}>进入朝阳项目页</button>
+            {hasProjects ? (
+              <button className="button-secondary" type="button" onClick={openLatestProject}>进入当前项目页</button>
+            ) : (
+              <button className="button-secondary" type="button" onClick={refreshProjects}>
+                {isLoading ? '同步中...' : '同步项目列表'}
+              </button>
+            )}
           </div>
         </section>
 
@@ -152,7 +172,7 @@ function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
           <div className="section-title">
             <div>
               <h3>栏目与 Agent 对应关系</h3>
-              <p>前端先用 mock 数据把层级跑顺，后面再接真实任务和知识状态。</p>
+              <p>项目目录先由后端提供，后续再继续接真实上传、graphify 构建和问答链路。</p>
             </div>
           </div>
 
@@ -163,19 +183,19 @@ function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
             </div>
             <div className="list-item">
               <strong>数据中心（知识工程 agent）</strong>
-              <p>管理知识库底座、数据目录和图谱关系。</p>
+              <p>负责接入文件、查看知识目录和观察图谱构建状态。</p>
             </div>
             <div className="list-item">
               <strong>项目管理（manager agent）</strong>
-              <p>展示项目目录、待办与告警，并把人带进具体项目页。</p>
+              <p>展示由 Agent OS API 返回的项目目录，而不是前端静态 mock 数据。</p>
             </div>
             <div className="list-item">
               <strong>项目页（project agent）</strong>
-              <p>以群聊为入口，但核心是任务链、结论卡片、证据链和审批轨迹。</p>
+              <p>围绕当前项目的资料、构建状态和后续问答组织协同。</p>
             </div>
             <div className="list-item">
               <strong>Agent / Skill</strong>
-              <p>说明这套系统的能力模块如何装配，而不是一次性定制页面。</p>
+              <p>说明系统能力模块如何装配，而不是绑定某个行业场景。</p>
             </div>
           </div>
 
@@ -188,7 +208,17 @@ function OverviewView({ openProjects, openGraph, openAgents, openProject }: {
   );
 }
 
-function GraphView() {
+function GraphView({
+  openProjects,
+  refreshProjects,
+  projects,
+  isLoading,
+}: {
+  openProjects: () => void;
+  refreshProjects: () => void;
+  projects: ProjectSummary[];
+  isLoading: boolean;
+}) {
   return (
     <div className="view">
       <MetricRow metrics={graphMetrics} />
@@ -205,16 +235,24 @@ function GraphView() {
             </div>
 
             <div className="upload-area">
-              <strong>{asset.title === '文件导入' ? '上传文件' : '新增连接器'}</strong>
-              <p className="subtle">前端阶段先保留视觉和结构，后面再接真实上传和连接流程。</p>
+              <strong>{asset.title === '文件导入' ? '项目目录' : '连接器目录'}</strong>
+              <p className="subtle">
+                {asset.title === '文件导入'
+                  ? '当前先完成“后端提供项目列表”这一步，下一步再接真实上传。'
+                  : '前端阶段先保留视觉和结构，后面再接真实连接流程。'}
+              </p>
               <div className="tag-row">
                 {asset.tags.map((tag) => (
                   <span key={tag} className={`tag ${toneClass(asset.tone)}`}>{tag}</span>
                 ))}
               </div>
               <div className="quick-links">
-                <button className="button" type="button">{asset.title === '文件导入' ? '上传文件' : '新增接口'}</button>
-                <button className="button-secondary" type="button">{asset.title === '文件导入' ? '查看目录' : '查看连接器'}</button>
+                <button className="button" type="button" onClick={asset.title === '文件导入' ? openProjects : undefined}>
+                  {asset.title === '文件导入' ? '查看项目' : '查看连接器'}
+                </button>
+                <button className="button-secondary" type="button" onClick={asset.title === '文件导入' ? refreshProjects : undefined}>
+                  {asset.title === '文件导入' ? (isLoading ? '刷新中...' : `后端项目 ${projects.length} 个`) : '接口待接'}
+                </button>
               </div>
             </div>
           </section>
@@ -260,16 +298,16 @@ function GraphView() {
         <section className="surface-card">
           <div className="section-title">
             <div>
-              <h3>知识库状态</h3>
-              <p>数据中心除了“图”，还要能展示完整度、更新时间和解释能力。</p>
+              <h3>项目状态</h3>
+              <p>当前先把“前端读取后端项目目录”这条链路打通。</p>
             </div>
           </div>
 
           <div className="tiny-kpi">
-            <div className="row"><span>知识覆盖率</span><strong>92%</strong></div>
-            <div className="row"><span>维修案例映射</span><strong>67%</strong></div>
-            <div className="row"><span>投诉工单映射</span><strong>51%</strong></div>
-            <div className="row"><span>最近更新</span><strong>3 项</strong></div>
+            <div className="row"><span>后端项目</span><strong>{projects.length}</strong></div>
+            <div className="row"><span>可问答</span><strong>{projects.filter((project) => project.status === '可问答').length}</strong></div>
+            <div className="row"><span>最新项目</span><strong>{projects[0]?.uploadedAt ?? '--'}</strong></div>
+            <div className="row"><span>当前阶段</span><strong>API 驱动</strong></div>
           </div>
         </section>
       </div>
@@ -277,21 +315,36 @@ function GraphView() {
   );
 }
 
-function ProjectsView({ visibleProjects, openProject }: {
+function ProjectsView({
+  metrics,
+  visibleProjects,
+  projectAlerts,
+  issueDistribution,
+  openProject,
+  refreshProjects,
+  isLoading,
+}: {
+  metrics: Metric[];
   visibleProjects: ProjectSummary[];
+  projectAlerts: string[];
+  issueDistribution: Array<{ label: string; value: string }>;
   openProject: (projectId: string) => void;
+  refreshProjects: () => void;
+  isLoading: boolean;
 }) {
   return (
     <div className="view">
-      <MetricRow metrics={overviewMetrics} />
+      <MetricRow metrics={metrics} />
 
       <section className="portfolio-grid">
         <article className="project-card create-card">
-          <div className="card-avatar">+</div>
-          <h4>新增项目</h4>
-          <p>创建新的 Project Agent 工作区，并绑定数据模板、权限链和基础 Agent 组合。</p>
+          <div className="card-avatar">↻</div>
+          <h4>同步后端项目</h4>
+          <p>项目管理页的数据现在由 Agent OS API 提供，当前先以一个后端项目目录跑通链路。</p>
           <div className="card-actions">
-            <button className="button-secondary" type="button">创建项目</button>
+            <button className="button" type="button" onClick={refreshProjects}>
+              {isLoading ? '同步中...' : '刷新项目列表'}
+            </button>
           </div>
         </article>
 
@@ -302,7 +355,7 @@ function ProjectsView({ visibleProjects, openProject }: {
                 <h4>{project.name}</h4>
                 <p>{project.description}</p>
               </div>
-              <span className={`status-badge ${statusToneClass(project.status)}`}>{project.status}</span>
+              <span className={`status-badge ${statusToneClass(project.statusTone)}`}>{project.status}</span>
             </div>
 
             <div className="project-kpis">
@@ -316,8 +369,8 @@ function ProjectsView({ visibleProjects, openProject }: {
 
             <div className="list-stack">
               <div className="list-item">
-                <strong>当前问题</strong>
-                <p>{project.focus}</p>
+                <strong>当前资料</strong>
+                <p>{project.fileName}</p>
               </div>
             </div>
 
@@ -328,30 +381,49 @@ function ProjectsView({ visibleProjects, openProject }: {
         ))}
       </section>
 
+      {visibleProjects.length === 0 && !isLoading && (
+        <section className="surface-card empty-state">
+          <div className="section-title">
+            <div>
+              <h3>后端当前还没有项目</h3>
+              <p>等接上创建项目或上传接口后，这里会展示新的项目目录。</p>
+            </div>
+          </div>
+          <div className="quick-links">
+            <button className="button" type="button" onClick={refreshProjects}>刷新项目列表</button>
+          </div>
+        </section>
+      )}
+
       <div className="overview-grid">
         <section className="surface-card">
           <div className="section-title">
             <div>
               <h3>待办与告警</h3>
-              <p>这部分从首页下沉到项目管理页，保持 Manager Agent 的层级清晰。</p>
+              <p>这里展示当前后端项目返回的状态提示和知识库提醒。</p>
             </div>
           </div>
 
           <div className="audit-list">
-            {projectAlerts.map((alert) => (
+            {projectAlerts.length > 0 ? projectAlerts.map((alert) => (
               <div key={alert} className="audit-item">
                 <strong>{alert.split('：')[0]}</strong>
-                <p>{alert.split('：')[1]}</p>
+                <p>{alert.split('：').slice(1).join('：')}</p>
               </div>
-            ))}
+            )) : (
+              <div className="audit-item">
+                <strong>暂无项目告警</strong>
+                <p>等后端返回项目后，这里会展示项目级待办与提示。</p>
+              </div>
+            )}
           </div>
         </section>
 
         <section className="surface-card">
           <div className="section-title">
             <div>
-              <h3>项目问题分布</h3>
-              <p>帮助 Manager Agent 快速判断资源投向。</p>
+              <h3>文件分布</h3>
+              <p>帮助 Manager Agent 了解当前项目目录里的资料类型结构。</p>
             </div>
           </div>
 
@@ -418,7 +490,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           <div className="section-title">
             <div>
               <h3>项目侧栏</h3>
-              <p>保留项目记忆、任务入口和当前参与 Agent。</p>
+              <p>当前项目信息全部由后端项目列表提供，后续再叠加真实运行态。</p>
             </div>
           </div>
 
@@ -436,7 +508,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           <div className="section-title">
             <div>
               <h3>项目群聊</h3>
-              <p>这页就是 Project Agent 的群聊工作台，聊天只是入口，不是全部。</p>
+              <p>这里先用后端项目上下文承载后续 graphify 构建与知识问答。</p>
             </div>
             <span className="pill is-mint">当前话题：{project.focus}</span>
           </div>
@@ -464,7 +536,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           <div className="section-title">
             <div>
               <h3>右侧协同轨迹</h3>
-              <p>帮助客户看懂这不是普通聊天，而是一个 Agent 在组织工作。</p>
+              <p>当前阶段先展示后端项目轨迹，后续再接真实运行时。</p>
             </div>
           </div>
 
@@ -478,7 +550,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           </div>
 
           <div className="footer-note">
-            这一栏后续可以升级成真正可展开的证据链面板，点开后看到时序图、规程摘录、维修单和审批日志。
+            等接上 Runtime Gateway 和 graphify 后，这一栏会变成真实的构建轨迹、snapshot 信息和知识问答证据链。
           </div>
         </section>
       </div>
@@ -488,15 +560,48 @@ function ProjectView({ project }: { project: ProjectSummary }) {
 
 export default function App() {
   const [activeView, setActiveView] = useState<ViewKey>('overview');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0].id);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const loadProjects = async () => {
+    setIsLoadingProjects(true);
+    setProjectsError(null);
+
+    try {
+      const response = await fetch('/api/projects');
+      if (!response.ok) {
+        throw new Error(`项目接口返回 ${response.status}`);
+      }
+
+      const data = (await response.json()) as ProjectListResponse;
+      setProjects(data.projects);
+      setSelectedProjectId((current) =>
+        data.projects.some((project) => project.id === current) ? current : data.projects[0]?.id ?? null,
+      );
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadProjects();
+  }, []);
+
+  const overviewMetrics = buildOverviewMetrics(projects);
+  const projectAlerts = buildProjectAlerts(projects);
+  const issueDistribution = buildIssueDistribution(projects);
+
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
 
   const visibleProjects = deferredSearchText
     ? projects.filter((project) => {
-      const candidate = `${project.name} ${project.focus} ${project.description}`.toLowerCase();
+      const candidate = `${project.name} ${project.focus} ${project.description} ${project.fileName}`.toLowerCase();
       return candidate.includes(deferredSearchText);
     })
     : projects;
@@ -519,8 +624,8 @@ export default function App() {
     ],
     projects: [
       { label: '项目目录', active: true },
-      { label: '待办与告警' },
-      { label: '项目问题' },
+      { label: '知识状态' },
+      { label: '文件分布' },
     ],
     agents: [
       { label: '基础 Agent', active: true },
@@ -543,12 +648,12 @@ export default function App() {
     graph: {
       eyebrow: 'Knowledge Engineering Agent',
       title: '数据中心（知识工程agent）',
-      description: '这是知识工程 Agent 的入口页，用来上传文件、接入接口，并维护知识库数据底座。',
+      description: '这是知识工程 Agent 的入口页，用来管理项目数据入口，并维护知识库数据底座。',
     },
     projects: {
       eyebrow: 'Manager Agent',
       title: '项目管理（manager agent）',
-      description: '这里展示现有项目数据和问题，同时承接待办与告警。每个项目都对应一个独立的 Project Agent 页面。',
+      description: '这里的项目列表已经切到 Agent OS API 返回的数据，不再使用前端本地项目 mock。',
     },
     agents: {
       eyebrow: 'Capability Matrix',
@@ -557,8 +662,10 @@ export default function App() {
     },
     project: {
       eyebrow: 'Project Agent',
-      title: `${selectedProject.name}（project agent）`,
-      description: '这是项目对应的群聊工作区。这里的主体不是栏目，而是一个具体的 Project Agent。',
+      title: selectedProject ? `${selectedProject.name}（project agent）` : '项目页（project agent）',
+      description: selectedProject
+        ? '这是由 Agent OS API 返回的项目工作区。这里的主体不是栏目，而是一个具体的 Project Agent。'
+        : '当前还没有项目，请先同步后端项目列表。',
     },
   };
 
@@ -579,9 +686,9 @@ export default function App() {
           </div>
         </div>
 
-        <button className="primary-ghost" type="button" onClick={() => showProject(projects[0].id)}>
-          <span>+</span>
-          新建任务
+        <button className="primary-ghost" type="button" onClick={loadProjects}>
+          <span>↻</span>
+          {isLoadingProjects ? '同步中...' : '同步项目'}
         </button>
 
         <nav className="nav-group">
@@ -597,18 +704,20 @@ export default function App() {
           </button>
 
           <div className="nav-subtree">
-            {projects.map((project) => (
+            {projects.length > 0 ? projects.map((project) => (
               <button
                 key={project.id}
                 className={`nav-subitem ${activeView === 'project' && selectedProjectId === project.id ? 'active' : ''}`}
                 type="button"
                 onClick={() => showProject(project.id)}
               >
-                {project.name}（project agent）
+                {project.name}
               </button>
-            ))}
-            <button className="nav-subitem create" type="button" onClick={() => setActiveView('projects')}>
-              + 新增项目
+            )) : (
+              <div className="nav-empty">{isLoadingProjects ? '正在同步后端项目...' : '后端当前还没有项目'}</div>
+            )}
+            <button className="nav-subitem create" type="button" onClick={loadProjects}>
+              + 刷新项目列表
             </button>
           </div>
 
@@ -621,7 +730,7 @@ export default function App() {
           <div className="user-avatar">S</div>
           <div>
             <strong>samhar</strong>
-            <p>产品负责人 · mock 模式</p>
+            <p>产品负责人 · API 驱动</p>
           </div>
         </div>
       </aside>
@@ -637,18 +746,77 @@ export default function App() {
         />
 
         <section className="content-shell">
+          {isLoadingProjects && projects.length === 0 && (
+            <section className="surface-card empty-state">
+              <div className="section-title">
+                <div>
+                  <h3>正在获取项目列表</h3>
+                  <p>前端正在从 Agent OS API 拉取项目数据。</p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {projectsError && (
+            <section className="surface-card empty-state">
+              <div className="section-title">
+                <div>
+                  <h3>项目列表加载失败</h3>
+                  <p>{projectsError}</p>
+                </div>
+              </div>
+              <div className="quick-links">
+                <button className="button" type="button" onClick={loadProjects}>重试</button>
+              </div>
+            </section>
+          )}
+
           {activeView === 'overview' && (
             <OverviewView
+              metrics={overviewMetrics}
+              hasProjects={projects.length > 0}
               openProjects={() => setActiveView('projects')}
               openGraph={() => setActiveView('graph')}
               openAgents={() => setActiveView('agents')}
-              openProject={showProject}
+              openLatestProject={() => projects[0] && showProject(projects[0].id)}
+              refreshProjects={loadProjects}
+              isLoading={isLoadingProjects}
             />
           )}
-          {activeView === 'graph' && <GraphView />}
-          {activeView === 'projects' && <ProjectsView visibleProjects={visibleProjects} openProject={showProject} />}
+          {activeView === 'graph' && (
+            <GraphView
+              openProjects={() => setActiveView('projects')}
+              refreshProjects={loadProjects}
+              projects={projects}
+              isLoading={isLoadingProjects}
+            />
+          )}
+          {activeView === 'projects' && (
+            <ProjectsView
+              metrics={overviewMetrics}
+              visibleProjects={visibleProjects}
+              projectAlerts={projectAlerts}
+              issueDistribution={issueDistribution}
+              openProject={showProject}
+              refreshProjects={loadProjects}
+              isLoading={isLoadingProjects}
+            />
+          )}
           {activeView === 'agents' && <AgentsView />}
-          {activeView === 'project' && <ProjectView project={selectedProject} />}
+          {activeView === 'project' && selectedProject && <ProjectView project={selectedProject} />}
+          {activeView === 'project' && !selectedProject && !isLoadingProjects && (
+            <section className="surface-card empty-state">
+              <div className="section-title">
+                <div>
+                  <h3>当前还没有项目工作区</h3>
+                  <p>请先同步后端项目列表，项目页会显示后端返回的项目工作区。</p>
+                </div>
+              </div>
+              <div className="quick-links">
+                <button className="button" type="button" onClick={loadProjects}>同步项目列表</button>
+              </div>
+            </section>
+          )}
         </section>
       </main>
     </div>
