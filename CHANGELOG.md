@@ -8,6 +8,45 @@
 
 ---
 
+## [0.7.0] - 2026-04-09
+
+整体架构切换至 graphify-v3 知识工程管线，集成 MinerU 混合 PDF 解析，实现完整 LLM Wiki 闭环。
+
+### Added
+
+- **graphify-v3 集成**：替换旧版知识工程管线（documentParse / ontologyExtract / schemaBuild / graphDBWrite / graphGenerate），改用 graphify-v3 的 normalize → detect → extract → build → cluster → export 流程
+- **GraphifyBridge 服务**：封装全部 graphify-v3 Python 调用（child_process），支持 normalize、detect、extract、build、cluster、export、pushToNeo4j、ask、searchRecords、searchConvertedDocs 等方法
+- **WorkspaceManager 服务**：管理全局 `graphify-workspace/` 目录，支持跨任务知识累积
+- **graphify 技能组**：`graphifyNormalize`、`graphifyExtract`、`graphifyBuild`、`graphifyExport`、`graphifyAssets` 五个新 skill
+- **MinerU 混合 PDF 解析**：安装 MinerU 3.0.9（pipeline 后端），采用混合模式——pypdf 快速文本提取（~0.4s）+ MinerU 仅处理图片页 OCR（~37s/2 张图片），相比纯 MinerU 全文档解析（8.8 分钟）提速 11 倍
+- **HTML 表格转 Markdown**：`_html_table_to_markdown()` 将 MinerU OCR 输出的 `<table>` HTML 转为纯文本 markdown 表格，确保全文检索可命中表格内数据
+- **OCR 文本清理**：`_clean_ocr_text()` 清除 MinerU 输出中无效的图片引用链接，仅保留可识别文本
+- **全文检索层**：`searchConvertedDocs` 方法对 converted 目录下 markdown 文件进行关键词匹配，弥补图数据库结构化检索的不足
+- **HF 镜像支持**：`HF_ENDPOINT=https://hf-mirror.com` 环境变量传递，解决国内 HuggingFace 模型下载问题
+- **Gateway 新技能**：`graphify-semantic-extract` 和 `graphify-community-label` 系统提示词，支持 MiniMax LLM 驱动的语义提取和社区命名
+
+### Changed
+
+- **知识检索改为三路并行**：graphify.ask + graphify.searchRecords + searchConvertedDocs，使用 `Promise.allSettled` 确保单路失败不影响整体
+- **GatewayClient 超时**：从 30s 增加到 180s，防止语义提取超时
+- **GraphifyBridge normalize 超时**：从 600s 增加到 1200s，适应 MinerU 处理大文档
+- **graphify-v3 normalize.py**：`_run_mineru` 改为 `-b pipeline` 后端（避免本地 VLM），超时从 600s 增到 1200s；新增 `_find_mineru_md` / `_find_mineru_json` 适配 MinerU 3.x 输出文件命名
+- **前端图谱可视化**：适配 graphify node-link 格式，支持社区着色、置信度透明度、动态图例
+- **结果面板**：显示 `GRAPH_REPORT.md` 和 `HEALTH_REPORT.md` 的 Markdown 渲染
+
+### Removed
+
+- 旧版管线服务：`ChunkService`、`CrossValidator`、`DocumentParserService`、`VisionExtractService`
+- 旧版技能：`documentParse`、`ontologyExtract`、`schemaBuild`、`graphDBWrite`、`graphGenerate`
+
+### Fixed
+
+- **知识检索找不到表格数据**：新增全文检索层直接搜索 converted markdown，解决 graphify 结构化检索遗漏原始表格内容的问题
+- **连续检索失败**：`Promise.allSettled` 替代 `Promise.all`，Python 子进程超时从 30s 增加到 60s
+- **图片表格未解析**：MinerU 混合模式自动识别纯图片页并 OCR，表格数据完整提取为可搜索文本
+
+---
+
 ## [0.6.0] - 2026-04-07
 
 前端体验优化：知识图谱布局散开 + 全屏查看 + 数据持久化 + 清除按钮。

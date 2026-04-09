@@ -43,11 +43,12 @@
 | 后端框架 | Fastify + TypeScript | 高性能 Node.js 服务 |
 | 实时通信 | @fastify/websocket | 双向 WebSocket |
 | 文件上传 | @fastify/multipart | 50MB 限制 |
-| 文档解析 | Docling (Docker) | IBM 开源 TableFormer，表格精度 97.9% |
+| 知识工程管线 | graphify-v3 | LLM Wiki 实现：normalize → extract → build → cluster → export |
+| PDF 解析 | pypdf + MinerU 3.0 | 混合模式：pypdf 快速文本提取 + MinerU 仅 OCR 图片页 |
 | 多格式支持 | exceljs / mammoth | Excel 原生解析 + Word 转 Markdown |
 | Agent 底座 | KodaX | 独立仓库引用 |
-| LLM | MiniMax（主）/ 千问（备） | 已采购 |
-| 图数据库 | Neo4j | Bolt 协议连接 |
+| LLM | MiniMax M2.7 | 语义提取 + 社区命名 + 答案生成 |
+| 图数据库 | Neo4j | Bolt 协议连接，graphify push_to_neo4j |
 
 ## 目录结构
 
@@ -87,9 +88,8 @@ knowledgeEngineeringDemo/
 
 - Node.js >= 18.0.0
 - npm
-- Docker Desktop（用于 Docling 文档解析服务）
+- Python >= 3.10（推荐 3.12，`brew install python@3.12`）
 - Neo4j（`brew install neo4j` 或 Docker）
-- GraphicsMagick + Ghostscript（`brew install graphicsmagick ghostscript`，PDF 转图片需要）
 
 ### 1. 克隆项目
 
@@ -114,26 +114,23 @@ cd frontend && npm install
 cd ../backend && npm install
 ```
 
-### 4. 启动 Docling 文档解析服务（Docker）
-
-Docling 是 IBM 开源的文档解析引擎，使用 TableFormer 深度学习模型识别表格结构（精度 97.9%）。通过 Docker 容器本地部署：
+### 4. 安装 Python 环境和 graphify-v3
 
 ```bash
-# 首次启动（会自动拉取镜像，约 2-3GB）
-docker run -d --name docling-serve -p 5001:5001 ghcr.io/docling-project/docling-serve-cpu:latest
+# 创建虚拟环境
+python3.12 -m venv .venv
+source .venv/bin/activate
 
-# 验证服务是否就绪
-curl http://localhost:5001/health
-# 应返回: {"status":"ok"}
+# 安装 graphify-v3 及其依赖
+pip install -e "graphify-v3[all]"
+
+# 安装 MinerU（用于图片表格 OCR）
+pip install "mineru[core]"
 ```
 
-后续启动只需：
+> **MinerU 首次运行说明**：首次处理 PDF 时会从 HuggingFace 下载模型文件（约 1-2GB）。国内用户会自动使用 `hf-mirror.com` 镜像加速。模型下载后会缓存到本地，后续运行无需重复下载。
 
-```bash
-docker start docling-serve
-```
-
-> **注意**：如果 Docker Desktop 未运行，需先启动 Docker Desktop 应用，等待引擎就绪后再执行上述命令。
+> **MinerU 混合模式**：系统采用混合 PDF 解析策略——pypdf 快速提取文本（~0.4s），MinerU 仅处理纯图片页的 OCR（~37s/2 张图），避免全文档 MinerU 解析的 8.8 分钟开销。无图片页的 PDF 处理速度与未安装 MinerU 时一致。
 
 ### 5. 启动开发服务器
 
@@ -156,7 +153,8 @@ MINIMAX_API_KEY=your_api_key
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your_neo4j_password
-DOCLING_API_URL=http://localhost:5001
+GRAPHIFY_PYTHON=/path/to/project/.venv/bin/python   # 可选，默认自动检测
+GRAPHIFY_WORKSPACE=/path/to/project/graphify-workspace  # 可选，默认项目根目录
 ```
 
 ### 7. Mock 模式
