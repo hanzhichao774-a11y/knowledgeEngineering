@@ -14,7 +14,7 @@ export interface ProjectSummary {
   shortName: string;
   description: string;
   focus: string;
-  status: '高关注' | '跟踪中' | '稳定';
+  status: string;
   statusTone: Tone;
   stats: Array<{ label: string; value: string }>;
   alerts: string[];
@@ -22,126 +22,175 @@ export interface ProjectSummary {
   chat: Array<{ speaker: string; role: 'user' | 'agent'; content: string }>;
   recommendations: Array<{ title: string; content: string }>;
   timeline: Array<{ title: string; content: string }>;
+  fileName: string;
+  fileType: string;
+  uploadedAt: string;
+  sizeLabel: string;
 }
 
-export const overviewMetrics: Metric[] = [
-  { label: '在线项目', value: '03', detail: '3 个 Project Agent 正在承载平台内的示例工作区', tone: 'mint' },
-  { label: '活跃 Agent', value: '12', detail: '知识工程、分析、自动化和治理持续协同', tone: 'blue' },
-  { label: '待审批动作', value: '05', detail: '需要在项目管理和项目页进一步确认', tone: 'amber' },
-  { label: '高优先告警', value: '02', detail: '当前都来自知识接入项目', tone: 'rose' },
-];
+interface UploadLike {
+  name: string;
+  size: number;
+  type: string;
+  lastModified: number;
+}
 
-export const projects: ProjectSummary[] = [
-  {
-    id: 'chaoyang',
-    name: '企业知识接入升级',
-    shortName: '知识接入项目',
-    description: '围绕资料接入、规则映射、风险审批和证据链留存展开。',
-    focus: '规则映射异常与高风险自动动作审批',
-    status: '高关注',
-    statusTone: 'rose',
-    stats: [
-      { label: '待处理问题', value: '4' },
-      { label: '待审批动作', value: '2' },
-      { label: '活跃 Agent', value: '5' },
-      { label: '今日协同次数', value: '11' },
-    ],
-    alerts: [
-      '规则映射结果出现高置信冲突。',
-      '存在一条高风险自动写回建议，已被 Manager Agent 拦截。',
-    ],
-    memory: [
-      '当前工作区已接入制度文档、操作手册、历史工单和审批记录。',
-      '最近 7 天新资料增长较快，知识边界和版本冲突开始出现。',
-      '负责人更关注“低风险试探性动作 + 完整证据链”。',
-    ],
-    chat: [
-      { speaker: '项目负责人', role: 'user', content: '分析一下这批新接入资料的规则映射冲突，并给出后续处理建议。' },
-      { speaker: 'Project Agent', role: 'agent', content: '已创建任务链：读取资料、检索规则、比对历史处理记录、生成建议并交 Manager Agent 审计。' },
-      { speaker: 'Analysis Agent', role: 'agent', content: '检测到 3 组字段映射冲突，其中 1 组会影响后续自动写回动作。' },
-      { speaker: 'Knowledge Agent', role: 'agent', content: '业务规则 4.2 指向“高置信冲突 + 自动写回”组合，必须先补充人工校验，不建议直接执行。' },
-      { speaker: 'Automation Agent', role: 'agent', content: '如果强制执行自动写回，可能会污染当前版本快照，并影响后续检索结果。' },
-      { speaker: 'Project Agent', role: 'agent', content: '综合判断更适合先做规则复核，再放行低风险补写；高风险写回动作继续保持人工审批。' },
-    ],
-    recommendations: [
-      { title: '结论', content: '当前问题更像规则冲突和版本边界不清，而不是单点数据异常。' },
-      { title: '建议动作', content: '先做规则复核，再放行低风险补写；高风险自动写回动作继续要求人工审批。' },
-      { title: '审批状态', content: '已放行低风险规则补写，已拦截高风险自动写回建议。' },
-    ],
-    timeline: [
-      { title: '09:12 Project Agent', content: '创建规则冲突诊断任务链，唤醒 3 个专业 Agent。' },
-      { title: '09:13 数据调用', content: '读取 126 份资料，命中 3 组冲突规则和 2 条历史处理记录。' },
-      { title: '09:14 风险审计', content: 'Manager Agent 放行低风险建议，拦截高风险自动写回动作。' },
-      { title: '09:15 等待人工确认', content: '当前待项目负责人审批规则补写方案。' },
-    ],
-  },
-  {
-    id: 'haidian',
-    name: '销售线索协同试点',
-    shortName: '销售协同项目',
-    description: '聚焦线索打分、跟进编排和销售协作建议。',
-    focus: '线索优先级波动与跟进策略偏差',
-    status: '跟踪中',
+const documentExtensions = new Set(['pdf', 'doc', 'docx', 'md', 'txt']);
+const sheetExtensions = new Set(['xls', 'xlsx', 'csv']);
+const slideExtensions = new Set(['ppt', 'pptx', 'key']);
+
+function formatCount(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getExtension(filename: string) {
+  const segments = filename.split('.');
+  return segments.length > 1 ? segments.at(-1)!.toLowerCase() : 'file';
+}
+
+function trimExtension(filename: string) {
+  return filename.replace(/\.[^.]+$/, '');
+}
+
+function humanizeProjectName(filename: string) {
+  return trimExtension(filename)
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toShortName(name: string) {
+  if (name.length <= 12) return name;
+  return `${name.slice(0, 12)}...`;
+}
+
+function formatTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp));
+}
+
+function detectFileClass(extension: string) {
+  if (documentExtensions.has(extension)) return '文档资料';
+  if (sheetExtensions.has(extension)) return '结构化表格';
+  if (slideExtensions.has(extension)) return '演示资料';
+  return '其他资料';
+}
+
+function detectFocus(extension: string) {
+  if (documentExtensions.has(extension)) return '文档解析与知识抽取';
+  if (sheetExtensions.has(extension)) return '结构化记录解析与字段映射';
+  if (slideExtensions.has(extension)) return '演示材料结构抽取与摘要';
+  return '通用文件接入与知识构建';
+}
+
+export function createProjectFromUpload(file: UploadLike, order: number): ProjectSummary {
+  const extension = getExtension(file.name);
+  const fileClass = detectFileClass(extension);
+  const projectName = humanizeProjectName(file.name);
+  const shortName = toShortName(projectName);
+  const uploadedAt = formatTimestamp(file.lastModified || Date.now());
+  const sizeLabel = formatFileSize(file.size);
+  const id = `upload-${file.lastModified}-${file.size}-${order}`;
+
+  return {
+    id,
+    name: projectName || `上传项目 ${order + 1}`,
+    shortName,
+    description: `由上传文件生成的项目工作区，当前文件类型为 ${fileClass}。`,
+    focus: `${fileClass}的解析、构建与问答准备`,
+    status: '待解析',
     statusTone: 'amber',
+    fileName: file.name,
+    fileType: extension.toUpperCase(),
+    uploadedAt,
+    sizeLabel,
     stats: [
-      { label: '待处理问题', value: '3' },
-      { label: '待审批动作', value: '1' },
-      { label: '活跃 Agent', value: '4' },
-      { label: '今日协同次数', value: '7' },
+      { label: '文件数量', value: '1' },
+      { label: '文件类型', value: extension.toUpperCase() },
+      { label: '文件大小', value: sizeLabel },
+      { label: '上传时间', value: uploadedAt },
     ],
     alerts: [
-      'CRM 中一批线索标签缺失，评分结果不稳定。',
-      '高意向线索的跟进策略区间偏宽，置信度不足。',
+      `${file.name} 已上传，等待 graphify 解析。`,
+      '当前知识库尚未构建，问答能力未激活。',
     ],
     memory: [
-      '项目重点不是聊天，而是协同节奏、策略质量和转化路径。',
-      'Analysis Agent 是这个项目的主力 Agent。',
+      `源文件：${file.name}`,
+      `资料类型：${fileClass}`,
+      `文件大小：${sizeLabel}`,
+      `上传时间：${uploadedAt}`,
     ],
     chat: [
-      { speaker: '销售负责人', role: 'user', content: '这批高意向线索的跟进优先级是否需要重新排序？' },
-      { speaker: 'Project Agent', role: 'agent', content: '已唤醒 Analysis Agent 和 Knowledge Agent，当前项目页保留为简版骨架。' },
+      { speaker: '项目负责人', role: 'user', content: `请基于这份文件建立知识库并准备后续问答：${file.name}` },
+      { speaker: 'Project Agent', role: 'agent', content: '已接收文件，当前前端阶段仅完成上传驱动的项目创建；后续将接入 graphify 解析。' },
     ],
     recommendations: [
-      { title: '结论', content: '更适合先补齐线索标签，再重新排序高意向跟进队列。' },
-      { title: '建议动作', content: '补齐 CRM 缺失字段后重新计算优先级区间。' },
+      { title: '当前状态', content: '文件已上传，项目工作区已创建，但知识库仍处于待解析状态。' },
+      { title: '下一步动作', content: '调用 graphify 对当前项目目录执行解析，生成 graphify-out 知识资产。' },
+      { title: '问答前提', content: '完成知识库构建后，才可以基于该项目发起知识问答。' },
     ],
     timeline: [
-      { title: '10:03 Analysis Agent', content: '识别到 2 批异常线索，需补齐缺失标签后再做优先级重排。' },
+      { title: `${uploadedAt} 文件上传`, content: `${file.name} 已进入当前项目工作区。` },
+      { title: `${uploadedAt} 项目创建`, content: '项目管理页已基于上传文件生成对应项目。' },
+      { title: '待执行 graphify', content: '等待 Runtime Gateway 触发 graphify 解析。' },
     ],
-  },
-  {
-    id: 'service',
-    name: '客服质检联动项目',
-    shortName: '客服质检项目',
-    description: '围绕会话质检、问题聚类和处理建议进行协同。',
-    focus: '高风险会话聚类与回访任务派发',
-    status: '稳定',
-    statusTone: 'mint',
-    stats: [
-      { label: '待处理问题', value: '2' },
-      { label: '待审批动作', value: '0' },
-      { label: '活跃 Agent', value: '3' },
-      { label: '今日协同次数', value: '5' },
-    ],
-    alerts: [
-      '一批高风险会话标签集中，需做问题归因。',
-    ],
-    memory: [
-      '会话质检和工单结果需要联动查看，不适合只做文本总结。',
-    ],
-    chat: [
-      { speaker: '客服主管', role: 'user', content: '把本周高风险会话按问题类型和责任归属聚一聚。' },
-      { speaker: 'Project Agent', role: 'agent', content: '已整理会话聚类与工单结果，当前保留轻量群聊骨架。' },
-    ],
-    recommendations: [
-      { title: '结论', content: '当前高风险会话存在明显问题集中度，值得单独拉出排查任务。' },
-      { title: '建议动作', content: '把回访任务派发给对应团队，并保留后续质检记录。' },
-    ],
-    timeline: [
-      { title: '11:26 Project Agent', content: '会话聚类报告已生成，待派发后续回访。' },
-    ],
-  },
-];
+  };
+}
+
+export function buildOverviewMetrics(projects: ProjectSummary[]): Metric[] {
+  const uploadCount = projects.length;
+  const parsePending = projects.filter((project) => project.status === '待解析').length;
+  const askReady = projects.filter((project) => project.status === '可问答').length;
+
+  return [
+    { label: '在线项目', value: formatCount(uploadCount), detail: '项目管理页的数据改为由上传文件驱动生成', tone: 'mint' },
+    { label: '已上传文件', value: formatCount(uploadCount), detail: '每个已上传文件都会生成一个项目工作区', tone: 'blue' },
+    { label: '待解析项目', value: formatCount(parsePending), detail: '这些项目已上传文件，但知识库尚未构建', tone: 'amber' },
+    { label: '可问答知识库', value: formatCount(askReady), detail: '当前前端阶段默认未接入真实解析链路', tone: 'rose' },
+  ];
+}
+
+export function buildProjectAlerts(projects: ProjectSummary[]) {
+  return projects.slice(0, 4).map((project) => `${project.shortName}：${project.fileName} 已上传，当前状态为 ${project.status}。`);
+}
+
+export function buildIssueDistribution(projects: ProjectSummary[]) {
+  let documentCount = 0;
+  let sheetCount = 0;
+  let slideCount = 0;
+  let otherCount = 0;
+
+  for (const project of projects) {
+    const extension = project.fileType.toLowerCase();
+    if (documentExtensions.has(extension)) {
+      documentCount += 1;
+    } else if (sheetExtensions.has(extension)) {
+      sheetCount += 1;
+    } else if (slideExtensions.has(extension)) {
+      slideCount += 1;
+    } else {
+      otherCount += 1;
+    }
+  }
+
+  return [
+    { label: '文档资料', value: String(documentCount) },
+    { label: '结构化表格', value: String(sheetCount) },
+    { label: '演示资料', value: String(slideCount) },
+    { label: '其他资料', value: String(otherCount) },
+  ];
+}
 
 export const graphMetrics: Metric[] = [
   { label: '文件数据源', value: '24', detail: '文档、对话、日志、工单都已纳入目录', tone: 'mint' },
@@ -166,11 +215,11 @@ export const graphAssets = [
 ];
 
 export const graphNodes = [
-  { title: '客户工单 A-12', desc: '高风险标签冲突', tone: 'mint' as Tone },
-  { title: '会话记录', desc: 'session-04', tone: 'blue' as Tone },
-  { title: '业务规则 4.2', desc: '高风险动作审批规则', tone: 'amber' as Tone },
-  { title: '处理事件', desc: '最近一次人工复核', tone: 'blue' as Tone },
-  { title: '项目工作区', desc: '企业知识接入升级', tone: 'mint' as Tone },
+  { title: '上传文件', desc: '待解析资料', tone: 'mint' as Tone },
+  { title: '文件元数据', desc: 'name / type / size', tone: 'blue' as Tone },
+  { title: 'graphify', desc: '知识编译与图谱构建', tone: 'amber' as Tone },
+  { title: '知识快照', desc: 'graphify-out', tone: 'blue' as Tone },
+  { title: '项目工作区', desc: '每个项目一套知识库', tone: 'mint' as Tone },
 ];
 
 export const agents = [
@@ -209,18 +258,4 @@ export const agents = [
     tags: ['审计', '熔断', '冲突协调'],
     tone: 'rose' as Tone,
   },
-];
-
-export const projectAlerts = [
-  '知识接入项目：一条低风险规则补写建议待项目负责人审批。',
-  '知识接入项目：存在一条高风险自动写回建议，已被 Manager Agent 拦截。',
-  '销售协同项目：CRM 中一批线索标签缺失，需数据补录。',
-  '客服质检项目：高风险会话聚类报告已生成，待派发回访任务。',
-];
-
-export const issueDistribution = [
-  { label: '流程异常', value: '4' },
-  { label: '策略偏差', value: '2' },
-  { label: '数据缺口', value: '1' },
-  { label: '协同阻塞', value: '2' },
 ];
