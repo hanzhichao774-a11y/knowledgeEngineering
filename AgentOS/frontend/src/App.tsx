@@ -1,4 +1,6 @@
 import { useDeferredValue, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   agents,
   buildIssueDistribution,
@@ -7,6 +9,7 @@ import {
   graphAssets,
   graphMetrics,
   graphNodes,
+  type ChatMessage,
   type Metric,
   type ProjectSummary,
   type Tone,
@@ -23,12 +26,30 @@ interface ProjectListResponse {
   projects: ProjectSummary[];
 }
 
+interface ProjectChatResponse {
+  ok: boolean;
+  projectId: string;
+  message: ChatMessage;
+}
+
 function toneClass(tone: Tone) {
   return `is-${tone}`;
 }
 
 function statusToneClass(tone: Tone) {
   return `is-${tone}`;
+}
+
+function formatMessageTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
 }
 
 function MetricRow({ metrics }: { metrics: Metric[] }) {
@@ -88,7 +109,7 @@ function Topbar({
           </svg>
           <input
             type="text"
-            placeholder="搜索项目、文件、Agent..."
+            placeholder="搜索项目、知识库、问题..."
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
           />
@@ -142,14 +163,14 @@ function OverviewView({
             <div className="stage-step">
               <div>
                 <strong>判断去哪一层处理问题</strong>
-                <span className="mini-stat">文件接入去数据中心，项目列表去项目管理，具体问答去项目页</span>
+                <span className="mini-stat">数据入口去数据中心，项目目录去项目管理，具体问答去项目页</span>
               </div>
               <span className="step-index">2</span>
             </div>
             <div className="stage-step">
               <div>
-                <strong>项目列表来自后端</strong>
-                <span className="mini-stat">当前项目目录由 Agent OS API 提供，不再使用前端本地 mock 项目数据</span>
+                <strong>项目页已经支持真实问答</strong>
+                <span className="mini-stat">当前群聊会直接调用后端项目问答接口，并基于现成 graphify 知识库返回结果</span>
               </div>
               <span className="step-index">3</span>
             </div>
@@ -172,7 +193,7 @@ function OverviewView({
           <div className="section-title">
             <div>
               <h3>栏目与 Agent 对应关系</h3>
-              <p>项目目录先由后端提供，后续再继续接真实上传、graphify 构建和问答链路。</p>
+              <p>当前项目目录由后端提供，项目页的问答则直接走现成知识库。</p>
             </div>
           </div>
 
@@ -191,7 +212,7 @@ function OverviewView({
             </div>
             <div className="list-item">
               <strong>项目页（project agent）</strong>
-              <p>围绕当前项目的资料、构建状态和后续问答组织协同。</p>
+              <p>围绕当前项目的知识库状态、群聊问答和证据追踪组织协同。</p>
             </div>
             <div className="list-item">
               <strong>Agent / Skill</strong>
@@ -238,7 +259,7 @@ function GraphView({
               <strong>{asset.title === '文件导入' ? '项目目录' : '连接器目录'}</strong>
               <p className="subtle">
                 {asset.title === '文件导入'
-                  ? '当前先完成“后端提供项目列表”这一步，下一步再接真实上传。'
+                  ? '当前先完成“后端提供项目 + 项目页问答”这条链路，下一步再接真实上传。'
                   : '前端阶段先保留视觉和结构，后面再接真实连接流程。'}
               </p>
               <div className="tag-row">
@@ -299,15 +320,15 @@ function GraphView({
           <div className="section-title">
             <div>
               <h3>项目状态</h3>
-              <p>当前先把“前端读取后端项目目录”这条链路打通。</p>
+              <p>当前已经把“前端读取后端项目目录 + 项目页发起问答”打通。</p>
             </div>
           </div>
 
           <div className="tiny-kpi">
             <div className="row"><span>后端项目</span><strong>{projects.length}</strong></div>
             <div className="row"><span>可问答</span><strong>{projects.filter((project) => project.status === '可问答').length}</strong></div>
-            <div className="row"><span>最新项目</span><strong>{projects[0]?.uploadedAt ?? '--'}</strong></div>
-            <div className="row"><span>当前阶段</span><strong>API 驱动</strong></div>
+            <div className="row"><span>挂载知识库</span><strong>{projects[0]?.knowledgeBase.label ?? '--'}</strong></div>
+            <div className="row"><span>当前阶段</span><strong>项目群聊可用</strong></div>
           </div>
         </section>
       </div>
@@ -340,7 +361,7 @@ function ProjectsView({
         <article className="project-card create-card">
           <div className="card-avatar">↻</div>
           <h4>同步后端项目</h4>
-          <p>项目管理页的数据现在由 Agent OS API 提供，当前先以一个后端项目目录跑通链路。</p>
+          <p>项目管理页的数据由 Agent OS API 提供，当前项目页已经可以直接进入问答。</p>
           <div className="card-actions">
             <button className="button" type="button" onClick={refreshProjects}>
               {isLoading ? '同步中...' : '刷新项目列表'}
@@ -369,8 +390,12 @@ function ProjectsView({
 
             <div className="list-stack">
               <div className="list-item">
-                <strong>当前资料</strong>
+                <strong>项目源文件</strong>
                 <p>{project.fileName}</p>
+              </div>
+              <div className="list-item">
+                <strong>当前挂载知识库</strong>
+                <p>{project.knowledgeBase.label}</p>
               </div>
             </div>
 
@@ -473,7 +498,58 @@ function AgentsView() {
   );
 }
 
-function ProjectView({ project }: { project: ProjectSummary }) {
+function MessageMeta({ message }: { message: ChatMessage }) {
+  if (!message.meta) return null;
+
+  return (
+    <div className="message-meta">
+      {message.meta.snapshotId && <span className="meta-pill">Snapshot {message.meta.snapshotId}</span>}
+      {message.meta.freshness?.status && <span className="meta-pill">Freshness {message.meta.freshness.status}</span>}
+      {typeof message.meta.recordCount === 'number' && <span className="meta-pill">记录 {message.meta.recordCount}</span>}
+      {typeof message.meta.nodeCount === 'number' && <span className="meta-pill">节点 {message.meta.nodeCount}</span>}
+      {typeof message.meta.sourceCount === 'number' && <span className="meta-pill">来源 {message.meta.sourceCount}</span>}
+    </div>
+  );
+}
+
+function ChatBubble({ message }: { message: ChatMessage }) {
+  return (
+    <div className={`chat-bubble ${message.role}`}>
+      <div className="chat-bubble-header">
+        <span className="speaker">{message.speaker}</span>
+        <span className="message-time">{formatMessageTime(message.createdAt)}</span>
+      </div>
+
+      {message.format === 'markdown' ? (
+        <div className="markdown-body">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+        </div>
+      ) : (
+        <p>{message.content}</p>
+      )}
+
+      <MessageMeta message={message} />
+    </div>
+  );
+}
+
+function ProjectView({
+  project,
+  messages,
+  draft,
+  onDraftChange,
+  onSend,
+  isSending,
+  chatError,
+}: {
+  project: ProjectSummary;
+  messages: ChatMessage[];
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onSend: (question?: string) => void;
+  isSending: boolean;
+  chatError: string | null;
+}) {
   return (
     <div className="view chat-page-layout">
       <div className="chat-summary-grid">
@@ -490,7 +566,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           <div className="section-title">
             <div>
               <h3>项目侧栏</h3>
-              <p>当前项目信息全部由后端项目列表提供，后续再叠加真实运行态。</p>
+              <p>这里展示当前项目、知识快照和挂载知识库的核心上下文。</p>
             </div>
           </div>
 
@@ -502,33 +578,71 @@ function ProjectView({ project }: { project: ProjectSummary }) {
               </div>
             ))}
           </div>
+
+          <div className="surface-subcard">
+            <h4>当前挂载知识库</h4>
+            <div className="tiny-kpi">
+              <div className="row"><span>名称</span><strong>{project.knowledgeBase.label}</strong></div>
+              <div className="row"><span>Freshness</span><strong>{project.knowledgeBase.freshness.status}</strong></div>
+              <div className="row"><span>Snapshot</span><strong>{project.knowledgeBase.snapshotId ?? '--'}</strong></div>
+              <div className="row"><span>节点 / 记录</span><strong>{project.knowledgeBase.nodeCount} / {project.knowledgeBase.recordCount}</strong></div>
+            </div>
+          </div>
         </section>
 
         <section className="surface-card">
           <div className="section-title">
             <div>
               <h3>项目群聊</h3>
-              <p>这里先用后端项目上下文承载后续 graphify 构建与知识问答。</p>
+              <p>这里已经接了真实问答接口。提问后会直接调用后端，再由现成 graphify 知识库返回 Markdown 回答。</p>
             </div>
             <span className="pill is-mint">当前话题：{project.focus}</span>
           </div>
 
-          <div className="chat-thread">
-            {project.chat.map((message, index) => (
-              <div key={`${message.speaker}-${index}`} className={`chat-bubble ${message.role}`}>
-                <span className="speaker">{message.speaker}</span>
-                <p>{message.content}</p>
-              </div>
+          <div className="suggestion-row">
+            {project.suggestedQuestions.map((question) => (
+              <button
+                key={question}
+                className="suggestion-chip"
+                type="button"
+                disabled={isSending}
+                onClick={() => onSend(question)}
+              >
+                {question}
+              </button>
             ))}
           </div>
 
-          <div className="recommendation-grid">
-            {project.recommendations.map((item) => (
-              <div key={item.title} className="recommendation-card">
-                <h4>{item.title}</h4>
-                <p>{item.content}</p>
-              </div>
+          <div className="chat-thread">
+            {messages.map((message) => (
+              <ChatBubble key={message.id} message={message} />
             ))}
+          </div>
+
+          <div className="chat-composer">
+            <label className="chat-input-shell">
+              <textarea
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                placeholder={`围绕“${project.knowledgeBase.label}”提问，例如：${project.suggestedQuestions[0] ?? '输入你的问题'}`}
+                rows={4}
+                disabled={isSending}
+              />
+            </label>
+
+            <div className="composer-actions">
+              <span className="subtle">当前挂载知识库：{project.knowledgeBase.label}</span>
+              <button
+                className="button"
+                type="button"
+                onClick={() => onSend()}
+                disabled={isSending || draft.trim().length === 0}
+              >
+                {isSending ? '回答中...' : '发送问题'}
+              </button>
+            </div>
+
+            {chatError && <div className="chat-error">{chatError}</div>}
           </div>
         </section>
 
@@ -536,8 +650,17 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           <div className="section-title">
             <div>
               <h3>右侧协同轨迹</h3>
-              <p>当前阶段先展示后端项目轨迹，后续再接真实运行时。</p>
+              <p>这里保留项目轨迹、当前建议动作和知识库状态说明。</p>
             </div>
+          </div>
+
+          <div className="recommendation-grid compact">
+            {project.recommendations.map((item) => (
+              <div key={item.title} className="recommendation-card">
+                <h4>{item.title}</h4>
+                <p>{item.content}</p>
+              </div>
+            ))}
           </div>
 
           <div className="timeline-list">
@@ -550,7 +673,7 @@ function ProjectView({ project }: { project: ProjectSummary }) {
           </div>
 
           <div className="footer-note">
-            等接上 Runtime Gateway 和 graphify 后，这一栏会变成真实的构建轨迹、snapshot 信息和知识问答证据链。
+            当前项目标题是“北京热力集团智能体建设”，但项目页实际挂载的是一个现成知识库快照。等上传链路接通后，这里会切换成项目自己的知识资产。
           </div>
         </section>
       </div>
@@ -565,6 +688,10 @@ export default function App() {
   const [searchText, setSearchText] = useState('');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessage[]>>({});
+  const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
+  const [chatErrors, setChatErrors] = useState<Record<string, string | null>>({});
+  const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
 
   const loadProjects = async () => {
@@ -593,15 +720,35 @@ export default function App() {
     void loadProjects();
   }, []);
 
+  useEffect(() => {
+    setChatThreads((current) => {
+      const next = { ...current };
+      for (const project of projects) {
+        if (!next[project.id]) {
+          next[project.id] = project.chat;
+        }
+      }
+      return next;
+    });
+  }, [projects]);
+
   const overviewMetrics = buildOverviewMetrics(projects);
   const projectAlerts = buildProjectAlerts(projects);
   const issueDistribution = buildIssueDistribution(projects);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const selectedMessages = selectedProject ? (chatThreads[selectedProject.id] ?? selectedProject.chat) : [];
 
   const visibleProjects = deferredSearchText
     ? projects.filter((project) => {
-      const candidate = `${project.name} ${project.focus} ${project.description} ${project.fileName}`.toLowerCase();
+      const candidate = [
+        project.name,
+        project.focus,
+        project.description,
+        project.fileName,
+        project.knowledgeBase.label,
+        ...project.suggestedQuestions,
+      ].join(' ').toLowerCase();
       return candidate.includes(deferredSearchText);
     })
     : projects;
@@ -609,6 +756,75 @@ export default function App() {
   const showProject = (projectId: string) => {
     setSelectedProjectId(projectId);
     setActiveView('project');
+  };
+
+  const updateDraft = (projectId: string, value: string) => {
+    setChatDrafts((current) => ({
+      ...current,
+      [projectId]: value,
+    }));
+  };
+
+  const sendQuestion = async (project: ProjectSummary, quickQuestion?: string) => {
+    const question = (quickQuestion ?? chatDrafts[project.id] ?? '').trim();
+    if (!question || sendingProjectId === project.id) return;
+
+    const now = new Date().toISOString();
+    const userMessage: ChatMessage = {
+      id: `${project.id}-user-${Date.now()}`,
+      speaker: '你',
+      role: 'user',
+      content: question,
+      format: 'plain',
+      createdAt: now,
+    };
+
+    setChatThreads((current) => ({
+      ...current,
+      [project.id]: [...(current[project.id] ?? project.chat), userMessage],
+    }));
+    setChatErrors((current) => ({ ...current, [project.id]: null }));
+    setChatDrafts((current) => ({ ...current, [project.id]: '' }));
+    setSendingProjectId(project.id);
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error ?? `问答接口返回 ${response.status}`);
+      }
+
+      const payload = (await response.json()) as ProjectChatResponse;
+      setChatThreads((current) => ({
+        ...current,
+        [project.id]: [...(current[project.id] ?? project.chat), payload.message],
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '问答失败';
+      const errorMessage: ChatMessage = {
+        id: `${project.id}-agent-error-${Date.now()}`,
+        speaker: 'Project Agent',
+        role: 'agent',
+        content: `### 请求失败\n\n${message}`,
+        format: 'markdown',
+        createdAt: new Date().toISOString(),
+      };
+
+      setChatThreads((current) => ({
+        ...current,
+        [project.id]: [...(current[project.id] ?? project.chat), errorMessage],
+      }));
+      setChatErrors((current) => ({ ...current, [project.id]: message }));
+    } finally {
+      setSendingProjectId(null);
+    }
   };
 
   const segmentsByView: Record<ViewKey, Segment[]> = {
@@ -664,7 +880,7 @@ export default function App() {
       eyebrow: 'Project Agent',
       title: selectedProject ? `${selectedProject.name}（project agent）` : '项目页（project agent）',
       description: selectedProject
-        ? '这是由 Agent OS API 返回的项目工作区。这里的主体不是栏目，而是一个具体的 Project Agent。'
+        ? '这是由 Agent OS API 返回的项目工作区。当前项目群聊已经接了真实问答接口。'
         : '当前还没有项目，请先同步后端项目列表。',
     },
   };
@@ -730,7 +946,7 @@ export default function App() {
           <div className="user-avatar">S</div>
           <div>
             <strong>samhar</strong>
-            <p>产品负责人 · API 驱动</p>
+            <p>产品负责人 · 项目群聊已接通</p>
           </div>
         </div>
       </aside>
@@ -803,7 +1019,17 @@ export default function App() {
             />
           )}
           {activeView === 'agents' && <AgentsView />}
-          {activeView === 'project' && selectedProject && <ProjectView project={selectedProject} />}
+          {activeView === 'project' && selectedProject && (
+            <ProjectView
+              project={selectedProject}
+              messages={selectedMessages}
+              draft={chatDrafts[selectedProject.id] ?? ''}
+              onDraftChange={(value) => updateDraft(selectedProject.id, value)}
+              onSend={(question) => void sendQuestion(selectedProject, question)}
+              isSending={sendingProjectId === selectedProject.id}
+              chatError={chatErrors[selectedProject.id] ?? null}
+            />
+          )}
           {activeView === 'project' && !selectedProject && !isLoadingProjects && (
             <section className="surface-card empty-state">
               <div className="section-title">

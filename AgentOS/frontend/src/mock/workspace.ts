@@ -8,6 +8,41 @@ export interface Metric {
   tone: Tone;
 }
 
+export interface ChatMessageMeta {
+  snapshotId?: string | null;
+  freshness?: {
+    status: 'fresh' | 'stale' | 'missing';
+    updatedAt?: string;
+  };
+  sourceCount?: number;
+  recordCount?: number;
+  nodeCount?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  speaker: string;
+  role: 'user' | 'agent';
+  content: string;
+  format: 'plain' | 'markdown';
+  createdAt: string;
+  meta?: ChatMessageMeta;
+}
+
+export interface KnowledgeBaseSummary {
+  label: string;
+  workspacePath: string;
+  snapshotId: string | null;
+  freshness: {
+    status: 'fresh' | 'stale' | 'missing';
+    updatedAt?: string;
+  };
+  updatedAt?: string;
+  nodeCount: number;
+  recordCount: number;
+  assetRoot?: string;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -19,13 +54,15 @@ export interface ProjectSummary {
   stats: Array<{ label: string; value: string }>;
   alerts: string[];
   memory: string[];
-  chat: Array<{ speaker: string; role: 'user' | 'agent'; content: string }>;
+  chat: ChatMessage[];
   recommendations: Array<{ title: string; content: string }>;
   timeline: Array<{ title: string; content: string }>;
   fileName: string;
   fileType: string;
   uploadedAt: string;
   sizeLabel: string;
+  suggestedQuestions: string[];
+  knowledgeBase: KnowledgeBaseSummary;
 }
 
 const documentExtensions = new Set(['pdf', 'doc', 'docx', 'md', 'txt']);
@@ -44,8 +81,8 @@ export function buildOverviewMetrics(projects: ProjectSummary[]): Metric[] {
   return [
     { label: '在线项目', value: formatCount(totalProjects), detail: '项目列表由 Agent OS API 提供', tone: 'mint' },
     { label: '知识库项目', value: formatCount(totalProjects), detail: '一个项目对应一套知识库', tone: 'blue' },
-    { label: '构建中 / 待解析', value: formatCount(pendingProjects), detail: '等待 Runtime Gateway 接入 graphify', tone: 'amber' },
-    { label: '可问答知识库', value: formatCount(readyProjects), detail: '可直接进入项目页查看上下文', tone: 'rose' },
+    { label: '构建中 / 待解析', value: formatCount(pendingProjects), detail: '等待 Runtime Gateway 接入更多项目目录', tone: 'amber' },
+    { label: '可问答知识库', value: formatCount(readyProjects), detail: '项目页已支持真实问答交互', tone: 'rose' },
   ];
 }
 
@@ -92,7 +129,7 @@ export const graphMetrics: Metric[] = [
 export const graphAssets = [
   {
     title: '文件导入',
-    description: '下一步会把真实上传接口接进来；当前项目目录先由 Agent OS API 提供。',
+    description: '下一步会把真实上传接口接进来；当前项目目录和问答能力先由 API 驱动。',
     tags: ['业务文档', '规则文档', '操作日志', '工单记录'],
     tone: 'blue' as Tone,
   },
@@ -106,7 +143,7 @@ export const graphAssets = [
 
 export const graphNodes = [
   { title: '项目目录', desc: '后端返回项目列表', tone: 'mint' as Tone },
-  { title: '文件元数据', desc: 'name / type / size', tone: 'blue' as Tone },
+  { title: '项目群聊', desc: '项目页直接发起知识问答', tone: 'blue' as Tone },
   { title: 'graphify', desc: '知识编译与图谱构建', tone: 'amber' as Tone },
   { title: '知识快照', desc: 'graphify-out', tone: 'blue' as Tone },
   { title: '项目知识库', desc: '每个项目一套知识库', tone: 'mint' as Tone },
