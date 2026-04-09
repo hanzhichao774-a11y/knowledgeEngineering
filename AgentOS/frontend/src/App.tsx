@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -16,6 +17,8 @@ import {
   type Tone,
   type ViewKey,
 } from './mock/workspace';
+
+const PROJECT_STATE_STORAGE_KEY = 'agentos-project-state-v1';
 
 interface Segment {
   label: string;
@@ -38,6 +41,11 @@ interface ProjectConversation {
   title: string;
   messages: ChatMessage[];
   updatedAt: string;
+}
+
+interface StoredProjectState {
+  projectConversations: Record<string, ProjectConversation[]>;
+  selectedConversationIds: Record<string, string>;
 }
 
 function toneClass(tone: Tone) {
@@ -104,6 +112,63 @@ function buildConversationPreview(conversation: ProjectConversation) {
   if (!lastMessage) return '等待输入第一个问题';
   const cleaned = stripMarkdown(lastMessage.content);
   return cleaned.length > 40 ? `${cleaned.slice(0, 40)}...` : cleaned;
+}
+
+function buildProjectConversationRoute(projectId: string, conversationId?: string | null) {
+  const encodedProjectId = encodeURIComponent(projectId);
+  if (!conversationId) return `/projects/${encodedProjectId}`;
+  return `/projects/${encodedProjectId}/conversations/${encodeURIComponent(conversationId)}`;
+}
+
+function parseProjectRoute(pathname: string) {
+  const match = pathname.match(/^\/projects\/([^/]+)(?:\/conversations\/([^/]+))?$/);
+  if (!match) return null;
+  return {
+    projectId: decodeURIComponent(match[1]),
+    conversationId: match[2] ? decodeURIComponent(match[2]) : null,
+  };
+}
+
+function getViewFromPathname(pathname: string): ViewKey {
+  if (pathname === '/graph') return 'graph';
+  if (pathname === '/projects') return 'projects';
+  if (pathname === '/agents') return 'agents';
+  if (parseProjectRoute(pathname)) return 'project';
+  return 'overview';
+}
+
+function isKnownPath(pathname: string) {
+  return pathname === '/' || pathname === '/graph' || pathname === '/projects' || pathname === '/agents' || Boolean(parseProjectRoute(pathname));
+}
+
+function readStoredProjectState(): StoredProjectState {
+  if (typeof window === 'undefined') {
+    return {
+      projectConversations: {},
+      selectedConversationIds: {},
+    };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PROJECT_STATE_STORAGE_KEY);
+    if (!raw) {
+      return {
+        projectConversations: {},
+        selectedConversationIds: {},
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<StoredProjectState>;
+    return {
+      projectConversations: parsed.projectConversations ?? {},
+      selectedConversationIds: parsed.selectedConversationIds ?? {},
+    };
+  } catch {
+    return {
+      projectConversations: {},
+      selectedConversationIds: {},
+    };
+  }
 }
 
 function MetricRow({ metrics }: { metrics: Metric[] }) {
@@ -224,7 +289,7 @@ function OverviewView({
             <div className="stage-step">
               <div>
                 <strong>项目页已经支持真实问答</strong>
-                <span className="mini-stat">当前群聊会直接调用后端项目问答接口，并基于现成 graphify 知识库返回结果</span>
+                <span className="mini-stat">项目页已经有独立 URL，刷新后不会再回到初始化页面</span>
               </div>
               <span className="step-index">3</span>
             </div>
@@ -247,7 +312,7 @@ function OverviewView({
           <div className="section-title">
             <div>
               <h3>栏目与 Agent 对应关系</h3>
-              <p>当前项目目录由后端提供，项目页的问答则直接走现成知识库。</p>
+              <p>项目目录由后端提供，项目对话页走独立路由并保留会话状态。</p>
             </div>
           </div>
 
@@ -266,7 +331,7 @@ function OverviewView({
             </div>
             <div className="list-item">
               <strong>项目页（project agent）</strong>
-              <p>围绕当前项目的知识库状态、群聊问答和证据追踪组织协同。</p>
+              <p>每个项目和每个对话都有自己的 URL，可直接刷新或分享路径。</p>
             </div>
             <div className="list-item">
               <strong>Agent / Skill</strong>
@@ -313,7 +378,7 @@ function GraphView({
               <strong>{asset.title === '文件导入' ? '项目目录' : '连接器目录'}</strong>
               <p className="subtle">
                 {asset.title === '文件导入'
-                  ? '当前先完成“后端提供项目 + 项目页问答”这条链路，下一步再接真实上传。'
+                  ? '当前先完成“后端提供项目 + 项目页问答 + URL 路由”这条链路，下一步再接真实上传。'
                   : '前端阶段先保留视觉和结构，后面再接真实连接流程。'}
               </p>
               <div className="tag-row">
@@ -374,7 +439,7 @@ function GraphView({
           <div className="section-title">
             <div>
               <h3>项目状态</h3>
-              <p>当前已经把“前端读取后端项目目录 + 项目页发起问答”打通。</p>
+              <p>当前已经把“前端读取后端项目目录 + 项目页发起问答 + 刷新保持 URL”打通。</p>
             </div>
           </div>
 
@@ -382,7 +447,7 @@ function GraphView({
             <div className="row"><span>后端项目</span><strong>{projects.length}</strong></div>
             <div className="row"><span>可问答</span><strong>{projects.filter((project) => project.status === '可问答').length}</strong></div>
             <div className="row"><span>挂载知识库</span><strong>{projects[0]?.knowledgeBase.label ?? '--'}</strong></div>
-            <div className="row"><span>当前阶段</span><strong>项目群聊可用</strong></div>
+            <div className="row"><span>当前阶段</span><strong>路由已接通</strong></div>
           </div>
         </section>
       </div>
@@ -587,6 +652,51 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
+function ParticipantCard({
+  agent,
+  expanded,
+  onToggle,
+}: {
+  agent: ParticipantAgent;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <article className={`participant-card ${expanded ? 'expanded' : 'collapsed'}`}>
+      <button
+        className="participant-toggle"
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+      >
+        <span className="participant-name">{agent.name}</span>
+        <span className="participant-chevron">{expanded ? '−' : '+'}</span>
+      </button>
+
+      {expanded && (
+        <>
+          <div className="participant-card-header">
+            <div className={`participant-avatar ${toneClass(agent.statusTone)}`}>{agent.icon}</div>
+            <span className={`status-badge ${statusToneClass(agent.statusTone)}`}>{agent.status}</span>
+          </div>
+
+          <div className="participant-copy">
+            <h4>{agent.role}</h4>
+          </div>
+
+          <p className="participant-description">{agent.description}</p>
+
+          <div className="tag-row">
+            {agent.capabilities.map((capability) => (
+              <span key={capability} className={`tag ${toneClass(agent.statusTone)}`}>{capability}</span>
+            ))}
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
 function ProjectView({
   project,
   conversations,
@@ -757,101 +867,62 @@ function ProjectView({
   );
 }
 
-function ParticipantCard({
-  agent,
-  expanded,
-  onToggle,
-}: {
-  agent: ParticipantAgent;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <article className={`participant-card ${expanded ? 'expanded' : 'collapsed'}`}>
-      <button
-        className="participant-toggle"
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-      >
-        <span className="participant-name">{agent.name}</span>
-        <span className="participant-chevron">{expanded ? '−' : '+'}</span>
-      </button>
-
-      {expanded && (
-        <>
-          <div className="participant-card-header">
-            <div className={`participant-avatar ${toneClass(agent.statusTone)}`}>{agent.icon}</div>
-            <span className={`status-badge ${statusToneClass(agent.statusTone)}`}>{agent.status}</span>
-          </div>
-
-          <div className="participant-copy">
-            <h4>{agent.role}</h4>
-          </div>
-
-          <p className="participant-description">{agent.description}</p>
-
-          <div className="tag-row">
-            {agent.capabilities.map((capability) => (
-              <span key={capability} className={`tag ${toneClass(agent.statusTone)}`}>{capability}</span>
-            ))}
-          </div>
-        </>
-      )}
-    </article>
-  );
-}
-
 export default function App() {
-  const [activeView, setActiveView] = useState<ViewKey>('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeState = parseProjectRoute(location.pathname);
+  const activeView = getViewFromPathname(location.pathname);
+
+  const storedState = readStoredProjectState();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
-  const [projectConversations, setProjectConversations] = useState<Record<string, ProjectConversation[]>>({});
-  const [selectedConversationIds, setSelectedConversationIds] = useState<Record<string, string>>({});
+  const [projectConversations, setProjectConversations] = useState<Record<string, ProjectConversation[]>>(storedState.projectConversations);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Record<string, string>>(storedState.selectedConversationIds);
   const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
   const [chatErrors, setChatErrors] = useState<Record<string, string | null>>({});
   const [sendingConversationKey, setSendingConversationKey] = useState<string | null>(null);
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
 
-  const loadProjects = async () => {
-    setIsLoadingProjects(true);
-    setProjectsError(null);
-
-    try {
-      const response = await fetch('/api/projects');
-      if (!response.ok) {
-        throw new Error(`项目接口返回 ${response.status}`);
-      }
-
-      const data = (await response.json()) as ProjectListResponse;
-      setProjects(data.projects);
-      setSelectedProjectId((current) =>
-        data.projects.some((project) => project.id === current) ? current : data.projects[0]?.id ?? null,
-      );
-    } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
-    } finally {
-      setIsLoadingProjects(false);
+  useEffect(() => {
+    if (!isKnownPath(location.pathname)) {
+      navigate('/', { replace: true });
     }
-  };
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
-    void loadProjects();
+    void (async () => {
+      setIsLoadingProjects(true);
+      setProjectsError(null);
+
+      try {
+        const response = await fetch('/api/projects');
+        if (!response.ok) {
+          throw new Error(`项目接口返回 ${response.status}`);
+        }
+
+        const data = (await response.json()) as ProjectListResponse;
+        setProjects(data.projects);
+      } catch (error) {
+        setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
     setProjectConversations((current) => {
       const next = { ...current };
       for (const project of projects) {
-        if (!next[project.id]) {
+        if (!next[project.id] || next[project.id].length === 0) {
           next[project.id] = [buildInitialConversation(project)];
         }
       }
       return next;
     });
+
     setSelectedConversationIds((current) => {
       const next = { ...current };
       for (const project of projects) {
@@ -863,14 +934,58 @@ export default function App() {
     });
   }, [projects]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        PROJECT_STATE_STORAGE_KEY,
+        JSON.stringify({
+          projectConversations,
+          selectedConversationIds,
+        } satisfies StoredProjectState),
+      );
+    } catch {
+      // ignore local persistence failures
+    }
+  }, [projectConversations, selectedConversationIds]);
+
   const overviewMetrics = buildOverviewMetrics(projects);
   const projectAlerts = buildProjectAlerts(projects);
   const issueDistribution = buildIssueDistribution(projects);
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
-  const selectedConversations = selectedProject ? (projectConversations[selectedProject.id] ?? [buildInitialConversation(selectedProject)]) : [];
-  const selectedConversationId = selectedProject ? (selectedConversationIds[selectedProject.id] ?? selectedConversations[0]?.id ?? null) : null;
-  const selectedConversation = selectedConversations.find((conversation) => conversation.id === selectedConversationId) ?? selectedConversations[0] ?? null;
+  const selectedProject = routeState
+    ? projects.find((project) => project.id === routeState.projectId) ?? null
+    : null;
+  const selectedConversations = selectedProject
+    ? (projectConversations[selectedProject.id] ?? [buildInitialConversation(selectedProject)])
+    : [];
+  const effectiveConversationId = selectedProject
+    ? (
+      routeState?.conversationId && selectedConversations.some((conversation) => conversation.id === routeState.conversationId)
+        ? routeState.conversationId
+        : selectedConversationIds[selectedProject.id] ?? selectedConversations[0]?.id ?? null
+    )
+    : null;
+  const selectedConversation = selectedConversations.find((conversation) => conversation.id === effectiveConversationId) ?? selectedConversations[0] ?? null;
+
+  useEffect(() => {
+    if (activeView !== 'project' || isLoadingProjects) return;
+
+    if (routeState && !selectedProject) {
+      navigate('/projects', { replace: true });
+      return;
+    }
+
+    if (selectedProject && effectiveConversationId && routeState?.conversationId !== effectiveConversationId) {
+      navigate(buildProjectConversationRoute(selectedProject.id, effectiveConversationId), { replace: true });
+    }
+  }, [
+    activeView,
+    effectiveConversationId,
+    isLoadingProjects,
+    navigate,
+    routeState,
+    selectedProject,
+  ]);
 
   const visibleProjects = deferredSearchText
     ? projects.filter((project) => {
@@ -886,9 +1001,11 @@ export default function App() {
     })
     : projects;
 
-  const showProject = (projectId: string) => {
-    setSelectedProjectId(projectId);
-    setActiveView('project');
+  const navigateToProject = (projectId: string) => {
+    const storedConversationId = selectedConversationIds[projectId];
+    const conversations = projectConversations[projectId];
+    const fallbackConversationId = storedConversationId ?? conversations?.[0]?.id ?? getDefaultConversationId(projectId);
+    navigate(buildProjectConversationRoute(projectId, fallbackConversationId));
   };
 
   const updateDraft = (projectId: string, conversationId: string | null, value: string) => {
@@ -909,10 +1026,7 @@ export default function App() {
       ...current,
       [projectId]: nextConversation.id,
     }));
-    setChatErrors((current) => ({
-      ...current,
-      [`${projectId}:${nextConversation.id}`]: null,
-    }));
+    navigate(buildProjectConversationRoute(projectId, nextConversation.id));
   };
 
   const selectConversation = (projectId: string, conversationId: string) => {
@@ -920,6 +1034,7 @@ export default function App() {
       ...current,
       [projectId]: conversationId,
     }));
+    navigate(buildProjectConversationRoute(projectId, conversationId));
   };
 
   const updateConversation = (
@@ -936,7 +1051,7 @@ export default function App() {
   };
 
   const sendQuestion = async (project: ProjectSummary, quickQuestion?: string) => {
-    const conversationId = selectedConversationIds[project.id] ?? getDefaultConversationId(project.id);
+    const conversationId = effectiveConversationId ?? getDefaultConversationId(project.id);
     const draftKey = `${project.id}:${conversationId}`;
     const question = (quickQuestion ?? chatDrafts[draftKey] ?? '').trim();
     if (!question || sendingConversationKey === draftKey) return;
@@ -956,6 +1071,10 @@ export default function App() {
       title: conversation.messages.length === 0 ? deriveConversationTitle(question) : conversation.title,
       messages: [...conversation.messages, userMessage],
       updatedAt: now,
+    }));
+    setSelectedConversationIds((current) => ({
+      ...current,
+      [project.id]: conversationId,
     }));
     setChatErrors((current) => ({ ...current, [draftKey]: null }));
     setChatDrafts((current) => ({ ...current, [draftKey]: '' }));
@@ -1006,8 +1125,8 @@ export default function App() {
   const segmentsByView: Record<ViewKey, Segment[]> = {
     overview: [
       { label: '总览', active: true },
-      { label: '项目', onClick: () => setActiveView('projects') },
-      { label: '能力', onClick: () => setActiveView('agents') },
+      { label: '项目', onClick: () => navigate('/projects') },
+      { label: '能力', onClick: () => navigate('/agents') },
     ],
     graph: [
       { label: '数据源', active: true },
@@ -1056,13 +1175,13 @@ export default function App() {
       eyebrow: 'Project Agent',
       title: selectedProject ? `${selectedProject.name}（project agent）` : '项目页（project agent）',
       description: selectedProject
-        ? '这是由 Agent OS API 返回的项目工作区。当前项目群聊已经接了真实问答接口。'
+        ? '这是由 Agent OS API 返回的项目工作区。当前 URL 会保留项目和对话上下文，刷新后仍停留在当前页面。'
         : '当前还没有项目，请先同步后端项目列表。',
     },
   };
 
   return (
-    <div className="app-frame">
+    <div className={`app-frame ${activeView === 'project' ? 'is-project-mode' : ''}`}>
       <aside className="sidebar">
         <div className="window-dots" aria-hidden="true">
           <span className="dot dot-red" />
@@ -1078,20 +1197,33 @@ export default function App() {
           </div>
         </div>
 
-        <button className="primary-ghost" type="button" onClick={loadProjects}>
+        <button className="primary-ghost" type="button" onClick={() => void (async () => {
+          setIsLoadingProjects(true);
+          setProjectsError(null);
+          try {
+            const response = await fetch('/api/projects');
+            if (!response.ok) throw new Error(`项目接口返回 ${response.status}`);
+            const data = (await response.json()) as ProjectListResponse;
+            setProjects(data.projects);
+          } catch (error) {
+            setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
+          } finally {
+            setIsLoadingProjects(false);
+          }
+        })()}>
           <span>↻</span>
           {isLoadingProjects ? '同步中...' : '同步项目'}
         </button>
 
         <nav className="nav-group">
           <p className="nav-caption">Workspace</p>
-          <button className={`nav-item ${activeView === 'overview' ? 'active' : ''}`} type="button" onClick={() => setActiveView('overview')}>
+          <button className={`nav-item ${activeView === 'overview' ? 'active' : ''}`} type="button" onClick={() => navigate('/')}>
             首页（manager agent）
           </button>
-          <button className={`nav-item ${activeView === 'graph' ? 'active' : ''}`} type="button" onClick={() => setActiveView('graph')}>
+          <button className={`nav-item ${activeView === 'graph' ? 'active' : ''}`} type="button" onClick={() => navigate('/graph')}>
             数据中心（知识工程agent）
           </button>
-          <button className={`nav-item ${activeView === 'projects' ? 'active' : ''}`} type="button" onClick={() => setActiveView('projects')}>
+          <button className={`nav-item ${activeView === 'projects' ? 'active' : ''}`} type="button" onClick={() => navigate('/projects')}>
             项目管理（manager agent）
           </button>
 
@@ -1099,21 +1231,21 @@ export default function App() {
             {projects.length > 0 ? projects.map((project) => (
               <button
                 key={project.id}
-                className={`nav-subitem ${activeView === 'project' && selectedProjectId === project.id ? 'active' : ''}`}
+                className={`nav-subitem ${activeView === 'project' && selectedProject?.id === project.id ? 'active' : ''}`}
                 type="button"
-                onClick={() => showProject(project.id)}
+                onClick={() => navigateToProject(project.id)}
               >
                 {project.name}
               </button>
             )) : (
               <div className="nav-empty">{isLoadingProjects ? '正在同步后端项目...' : '后端当前还没有项目'}</div>
             )}
-            <button className="nav-subitem create" type="button" onClick={loadProjects}>
-              + 刷新项目列表
+            <button className="nav-subitem create" type="button" onClick={() => navigate('/projects')}>
+              + 查看项目目录
             </button>
           </div>
 
-          <button className={`nav-item ${activeView === 'agents' ? 'active' : ''}`} type="button" onClick={() => setActiveView('agents')}>
+          <button className={`nav-item ${activeView === 'agents' ? 'active' : ''}`} type="button" onClick={() => navigate('/agents')}>
             Agent / Skill
           </button>
         </nav>
@@ -1122,7 +1254,7 @@ export default function App() {
           <div className="user-avatar">S</div>
           <div>
             <strong>samhar</strong>
-            <p>产品负责人 · 项目群聊已接通</p>
+            <p>产品负责人 · 路由已接通</p>
           </div>
         </div>
       </aside>
@@ -1158,7 +1290,7 @@ export default function App() {
                 </div>
               </div>
               <div className="quick-links">
-                <button className="button" type="button" onClick={loadProjects}>重试</button>
+                <button className="button" type="button" onClick={() => navigate('/')}>返回首页</button>
               </div>
             </section>
           )}
@@ -1167,36 +1299,44 @@ export default function App() {
             <OverviewView
               metrics={overviewMetrics}
               hasProjects={projects.length > 0}
-              openProjects={() => setActiveView('projects')}
-              openGraph={() => setActiveView('graph')}
-              openAgents={() => setActiveView('agents')}
-              openLatestProject={() => projects[0] && showProject(projects[0].id)}
-              refreshProjects={loadProjects}
+              openProjects={() => navigate('/projects')}
+              openGraph={() => navigate('/graph')}
+              openAgents={() => navigate('/agents')}
+              openLatestProject={() => {
+                const project = projects[0];
+                if (project) navigateToProject(project.id);
+              }}
+              refreshProjects={() => navigate(0)}
               isLoading={isLoadingProjects}
             />
           )}
+
           {activeView === 'graph' && (
             <GraphView
-              openProjects={() => setActiveView('projects')}
-              refreshProjects={loadProjects}
+              openProjects={() => navigate('/projects')}
+              refreshProjects={() => navigate(0)}
               projects={projects}
               isLoading={isLoadingProjects}
             />
           )}
+
           {activeView === 'projects' && (
             <ProjectsView
               metrics={overviewMetrics}
               visibleProjects={visibleProjects}
               projectAlerts={projectAlerts}
               issueDistribution={issueDistribution}
-              openProject={showProject}
-              refreshProjects={loadProjects}
+              openProject={navigateToProject}
+              refreshProjects={() => navigate(0)}
               isLoading={isLoadingProjects}
             />
           )}
+
           {activeView === 'agents' && <AgentsView />}
+
           {activeView === 'project' && selectedProject && (
             <ProjectView
+              key={selectedProject.id}
               project={selectedProject}
               conversations={selectedConversations}
               selectedConversationId={selectedConversation?.id ?? null}
@@ -1209,16 +1349,17 @@ export default function App() {
               chatError={selectedConversation ? (chatErrors[`${selectedProject.id}:${selectedConversation.id}`] ?? null) : null}
             />
           )}
+
           {activeView === 'project' && !selectedProject && !isLoadingProjects && (
             <section className="surface-card empty-state">
               <div className="section-title">
                 <div>
-                  <h3>当前还没有项目工作区</h3>
-                  <p>请先同步后端项目列表，项目页会显示后端返回的项目工作区。</p>
+                  <h3>当前项目不存在</h3>
+                  <p>项目路径无效或项目尚未同步，请返回项目管理重新进入。</p>
                 </div>
               </div>
               <div className="quick-links">
-                <button className="button" type="button" onClick={loadProjects}>同步项目列表</button>
+                <button className="button" type="button" onClick={() => navigate('/projects')}>返回项目管理</button>
               </div>
             </section>
           )}
