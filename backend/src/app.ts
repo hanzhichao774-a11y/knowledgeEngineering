@@ -10,6 +10,7 @@ import { chatRoutes } from './routes/chat.js';
 import { graphRoutes } from './routes/graph.js';
 import { graphifyPlaygroundRoutes } from './routes/graphifyPlayground.js';
 import { uploadRoutes } from './routes/upload.js';
+import { reportRoutes } from './routes/report.js';
 import { wsRoutes } from './websocket/handler.js';
 import { initNeo4j } from './db/neo4j.js';
 import { TaskService } from './services/TaskService.js';
@@ -81,6 +82,7 @@ export async function buildApp(options: BackendAppOptions = {}): Promise<Fastify
   await app.register(graphRoutes, { prefix: '/api' });
   await app.register(graphifyPlaygroundRoutes, { prefix: '/api', gatewayClient, graphifyClient });
   await app.register(uploadRoutes, { prefix: '/api' });
+  await app.register(reportRoutes, { prefix: '/api' });
   await app.register(wsRoutes);
 
   if (options.initializeNeo4j !== false) {

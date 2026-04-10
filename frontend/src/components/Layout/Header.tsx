@@ -21,7 +21,7 @@ export function Header() {
       <div className={styles.left}>
         <Activity size={18} className={styles.logoIcon} />
         <div className={styles.logo}>
-          BizAgentOS<span className={styles.logoSub}>· 管理智能体</span>
+        BizAgentOS<span className={styles.logoSub}>· 多智能体操作系统</span>
         </div>
       </div>
       <div className={styles.right}>

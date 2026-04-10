@@ -54,8 +54,11 @@ export interface ChatMessage {
   timestamp: string;
   agentStatus?: AgentStatus;
   attachment?: FileAttachment;
+  attachments?: FileAttachment[];
   thinking?: string;
   metadata?: Record<string, unknown>;
+  report?: ReportData;
+  parentId?: string;
 }
 
 export interface OntologyClass {
@@ -155,7 +158,35 @@ export interface AgentDetail {
   skills: SkillInfo[];
 }
 
-export type RightTab = 'result' | 'agent' | 'graph';
+export type RightTab = 'result' | 'agent' | 'skill' | 'graph';
+
+export type AlertSeverity = 'high' | 'medium' | 'low';
+export type AlertCategory = 'anomaly' | 'threshold' | 'missing';
+
+export interface AlertItem {
+  id: string;
+  severity: AlertSeverity;
+  category: AlertCategory;
+  title: string;
+  description: string;
+  source: string;
+  time: string;
+}
+
+export interface ReportMetric {
+  label: string;
+  value: string;
+  unit?: string;
+  trend?: 'up' | 'down' | 'stable';
+}
+
+export interface ReportData {
+  title: string;
+  period: string;
+  summary: string[];
+  metrics: ReportMetric[];
+  source: string;
+}
 
 export type WSEvent =
   | { type: 'task.step.start'; taskId: string; stepIndex: number }

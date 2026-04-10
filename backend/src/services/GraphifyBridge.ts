@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readFileSync, existsSync, copyFileSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, copyFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 function getPython(): string {
@@ -122,14 +122,42 @@ function tokenizeForSearch(text: string): string[] {
       for (let i = 0; i < chunk.length - 2; i++) terms.push(chunk.slice(i, i + 3));
     }
   }
+
+  const mixed = text.match(/[\d]+[\u3400-\u9fff]+[\d]*[\u3400-\u9fff]*/g) ?? [];
+  for (const m of mixed) {
+    if (m.length >= 2) terms.push(m);
+  }
+
   return [...new Set(terms)];
 }
 
+function collectMdFiles(dir: string, root: string): string[] {
+  const results: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    try {
+      if (statSync(full).isDirectory()) {
+        results.push(...collectMdFiles(full, root));
+      } else if (entry.endsWith('.md')) {
+        results.push(path.relative(root, full));
+      }
+    } catch { /* skip inaccessible entries */ }
+  }
+  return results;
+}
+
+function normalizeForMatch(text: string): string {
+  return text
+    .replace(/(?<=[\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '')
+    .replace(/(?<=\d)\s+(?=[\u3400-\u9fff])/g, '')
+    .replace(/(?<=[\u3400-\u9fff])\s+(?=\d)/g, '');
+}
+
 function scoreSnippet(snippet: string, terms: string[]): number {
-  const lower = snippet.toLowerCase();
+  const normalized = normalizeForMatch(snippet).toLowerCase();
   let score = 0;
   for (const term of terms) {
-    if (lower.includes(term)) score += 1;
+    if (normalized.includes(term)) score += 1;
   }
   return score;
 }
@@ -568,14 +596,14 @@ print(json.dumps(results))
 
     let mdFiles: string[];
     try {
-      mdFiles = readdirSync(convertedDir).filter((f) => f.endsWith('.md'));
+      mdFiles = collectMdFiles(convertedDir, convertedDir);
     } catch {
       return [];
     }
 
-    for (const file of mdFiles) {
+    for (const relPath of mdFiles) {
       try {
-        const content = readFileSync(path.join(convertedDir, file), 'utf-8');
+        const content = readFileSync(path.join(convertedDir, relPath), 'utf-8');
         const lines = content.split('\n');
 
         for (let i = 0; i < lines.length; i += STEP_LINES) {
@@ -585,7 +613,8 @@ print(json.dumps(results))
 
           const score = scoreSnippet(snippet, terms);
           if (score > 0) {
-            scored.push({ file, snippet: snippet.slice(0, 1500), score });
+            const cleanSnippet = normalizeForMatch(snippet).slice(0, 1500);
+            scored.push({ file: relPath, snippet: cleanSnippet, score });
           }
         }
       } catch {

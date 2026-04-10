@@ -1,0 +1,242 @@
+.flow {
+  animation: fadeSlideIn 0.3s ease;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 16px;
+}
+
+/* Manager row */
+.managerRow {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+/* Connector lines */
+.connectorGroup {
+  position: relative;
+  height: 32px;
+  margin: 0 20px;
+}
+
+.vertLine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 14px;
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.horizLine {
+  position: absolute;
+  top: 14px;
+  left: 25%;
+  right: 25%;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+.branchLine {
+  position: absolute;
+  top: 14px;
+  width: 1px;
+  height: 18px;
+  background: var(--accent);
+  opacity: 0.5;
+  transform: translateX(-50%);
+}
+
+/* Worker row */
+.workerRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Node shared */
+.node {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.node:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.nodeManager {
+  border-color: rgba(20, 184, 166, 0.2);
+  background: linear-gradient(135deg, var(--glass-bg-light) 0%, rgba(20, 184, 166, 0.08) 100%);
+}
+
+.nodeWorker {
+  border-color: var(--border);
+}
+
+.nodeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.roleTag {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.roleManager {
+  background: var(--accent-bg);
+  color: var(--accent-light);
+}
+
+.roleWorker {
+  background: var(--cyan-bg);
+  color: var(--cyan);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+.nodeName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.nodeId {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.nodeSkillCount {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* Expanded detail */
+.nodeDetail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  animation: fadeSlideIn 0.2s ease;
+}
+
+.detailDesc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.detailModel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.detailLabel {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.detailValue {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--accent-light);
+  background: var(--accent-bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.detailSkills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.skillChip {
+  font-family: var(--font-display);
+  font-size: 9px;
+  padding: 2px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-secondary);
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.legendDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.legendManager {
+  background: var(--accent-light);
+}
+
+.legendWorker {
+  background: var(--cyan);
+}
+
+.legendHint {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+  opacity: 0.6;
+}

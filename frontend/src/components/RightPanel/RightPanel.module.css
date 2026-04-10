@@ -1,20 +1,22 @@
 /* Tabs */
 .tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
   padding: 0 12px;
+  gap: 2px;
 }
 
 .tab {
-  padding: 10px 12px;
-  font-size: 12px;
+  padding: 10px 10px;
+  font-size: 11px;
   color: var(--text-muted);
   cursor: pointer;
   border: none;
   border-bottom: 2px solid transparent;
   background: none;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   white-space: nowrap;
+  font-family: var(--font-body);
 }
 
 .tab:hover {
@@ -34,8 +36,10 @@
 
 /* Result Cards */
 .resultCard {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   margin-bottom: 12px;
   overflow: hidden;
@@ -46,7 +50,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
   cursor: pointer;
 }
 
@@ -112,7 +116,7 @@
   font-size: 10px;
   padding: 1px 4px;
   border-radius: 3px;
-  font-family: monospace;
+  font-family: var(--font-display);
 }
 
 .typeClass {
@@ -155,7 +159,7 @@
 
 /* Code Block */
 .codeBlock {
-  font-family: monospace;
+  font-family: var(--font-display);
   font-size: 11px;
   background: var(--bg);
   padding: 10px;
@@ -225,7 +229,8 @@
 }
 
 .metricCard {
-  background: var(--bg);
+  background: rgba(10, 12, 20, 0.5);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 10px;
 }
@@ -237,7 +242,8 @@
 }
 
 .metricValue {
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -276,7 +282,8 @@
 /* Graph */
 .graphContainer {
   height: 500px;
-  background: var(--bg);
+  background: rgba(10, 12, 20, 0.4);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   overflow: hidden;
   position: relative;
@@ -506,4 +513,52 @@
   color: var(--text-muted);
   margin-top: 4px;
   opacity: 0.7;
+}
+
+/* Runtime Monitor Section */
+.runtimeSection {
+  margin-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  animation: fadeSlideIn 0.3s ease;
+}
+
+.runtimeToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+}
+
+.runtimeToggle:hover {
+  color: var(--text);
+}
+
+.runtimeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+.runtimeLabel {
+  flex: 1;
+  text-align: left;
+}
+
+.runtimeBody {
+  margin-top: 10px;
+  animation: fadeSlideIn 0.25s ease;
 }

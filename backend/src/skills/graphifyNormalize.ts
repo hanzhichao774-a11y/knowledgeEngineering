@@ -1,17 +1,61 @@
 import type { ExecutionContext, SkillResult } from '../agents/types.js';
 import { getGraphifyBridge } from '../services/GraphifyBridge.js';
 import { getWorkspaceManager } from '../services/WorkspaceManager.js';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const bridge = getGraphifyBridge();
+
+function cleanCjkSpaces(text: string): string {
+  return text
+    .replace(/(?<=[\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, '')
+    .replace(/(?<=\d)\s+(?=[\u3400-\u9fff])/g, '')
+    .replace(/(?<=[\u3400-\u9fff])\s+(?=\d)/g, '');
+}
+
+function cleanConvertedMarkdown(workspacePath: string): number {
+  const convertedDir = path.join(workspacePath, 'graphify-out', 'converted');
+  let cleaned = 0;
+  try {
+    const entries = readdirSync(convertedDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const subdir = path.join(convertedDir, entry.name);
+        const subEntries = readdirSync(subdir);
+        for (const f of subEntries) {
+          if (f.endsWith('.md')) {
+            const fp = path.join(subdir, f);
+            const original = readFileSync(fp, 'utf-8');
+            const result = cleanCjkSpaces(original);
+            if (result !== original) {
+              writeFileSync(fp, result, 'utf-8');
+              cleaned++;
+            }
+          }
+        }
+      } else if (entry.name.endsWith('.md')) {
+        const fp = path.join(convertedDir, entry.name);
+        const original = readFileSync(fp, 'utf-8');
+        const result = cleanCjkSpaces(original);
+        if (result !== original) {
+          writeFileSync(fp, result, 'utf-8');
+          cleaned++;
+        }
+      }
+    }
+  } catch {
+    // converted dir may not exist yet
+  }
+  return cleaned;
+}
 
 export async function graphifyNormalizeSkill(ctx: ExecutionContext): Promise<SkillResult> {
   const startTime = Date.now();
   const ws = getWorkspaceManager();
 
   try {
-    if (!ctx.filePath) {
+    const allPaths = ctx.filePaths ?? (ctx.filePath ? [ctx.filePath] : []);
+    if (allPaths.length === 0) {
       return {
         skillName: '文档规范化',
         status: 'error',
@@ -21,7 +65,10 @@ export async function graphifyNormalizeSkill(ctx: ExecutionContext): Promise<Ski
       };
     }
 
-    const rawPath = ws.copyToRaw(ctx.filePath);
+    let rawPath: string = '';
+    for (const fp of allPaths) {
+      rawPath = ws.copyToRaw(fp);
+    }
     const isIncremental = ws.isIncremental();
 
     let detection;
@@ -89,6 +136,8 @@ export async function graphifyNormalizeSkill(ctx: ExecutionContext): Promise<Ski
       newFileCount = detection.total_files;
     }
 
+    const cleanedCount = cleanConvertedMarkdown(ws.workspacePath);
+
     const fileSummary = Object.entries(detection.files)
       .filter(([, files]) => files.length > 0)
       .map(([type, files]) => `${type}: ${files.length}`)
@@ -97,7 +146,7 @@ export async function graphifyNormalizeSkill(ctx: ExecutionContext): Promise<Ski
     ctx.onProgress({
       agentId: 'KE-01',
       role: 'worker',
-      content: `${isIncremental ? '增量' : '全量'}规范化完成：${fileSummary}，生成 ${normalizedFiles.length} 个 sidecar`,
+      content: `${isIncremental ? '增量' : '全量'}规范化完成：${fileSummary}，生成 ${normalizedFiles.length} 个 sidecar${cleanedCount > 0 ? `，清洗 ${cleanedCount} 个 CJK 文件` : ''}`,
       timestamp: new Date().toISOString(),
     });
 

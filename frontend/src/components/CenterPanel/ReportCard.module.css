@@ -1,0 +1,166 @@
+.card {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: 8px 0;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+
+.headerIcon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.period {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  margin-top: 2px;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 6px 14px 10px;
+}
+
+.metric {
+  background: rgba(10, 12, 20, 0.5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.metricLabel {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  font-family: var(--font-display);
+  letter-spacing: 0.3px;
+}
+
+.metricValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.metricUnit {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.trendUp { color: var(--red); }
+.trendDown { color: var(--green); }
+.trendStable { color: var(--text-muted); }
+
+.summarySection {
+  padding: 0 14px 10px;
+}
+
+.summaryTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.summaryList {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.summaryList li::marker {
+  color: var(--accent);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(10, 12, 20, 0.3);
+}
+
+.source {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.downloadBtns {
+  display: flex;
+  gap: 4px;
+}
+
+.downloadBtn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--accent-light);
+  font-size: 10px;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.downloadBtn:hover:not(:disabled) {
+  background: rgba(20, 184, 166, 0.18);
+  border-color: var(--accent);
+}
+
+.downloadBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

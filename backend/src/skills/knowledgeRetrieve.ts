@@ -45,6 +45,7 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
   try {
     if (ws.hasExistingGraph()) {
       const docSnippets = bridge.searchConvertedDocs(question, ws.workspacePath, 8);
+      console.log(`[knowledgeRetrieve] docSnippets found: ${docSnippets.length}, top scores: [${docSnippets.slice(0, 3).map((s) => `${s.file}:${s.score}`).join(', ')}]`);
 
       const [askResult, recordsResult] = await Promise.allSettled([
         bridge.ask(question, ws.workspacePath, 5),
@@ -61,6 +62,8 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
         console.warn('[knowledgeRetrieve] bridge.searchRecords failed:', (recordsResult.reason as Error).message);
       }
 
+      console.log(`[knowledgeRetrieve] graphAnswer length: ${graphAnswer.length}, recordResults: ${recordResults.length}`);
+
       const resultCount = recordResults.length + docSnippets.length + (graphAnswer ? 1 : 0);
 
       return {
@@ -73,6 +76,9 @@ export async function knowledgeRetrieveSkill(ctx: ExecutionContext): Promise<Ski
           graphifyAnswer: graphAnswer,
           recordResults,
           docSnippets,
+          docSnippetNote: docSnippets.length > 0
+            ? '以下 docSnippets 是从原始文档中提取的文本片段，包含实际数据，请优先参考。'
+            : undefined,
           graphifySources: [
             ...recordResults.map((r) => String(r.source_file ?? '')).filter(Boolean),
             ...docSnippets.map((s) => s.file).filter(Boolean),

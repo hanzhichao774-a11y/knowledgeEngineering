@@ -1,71 +1,106 @@
 import type { AgentConfig, ExecutionContext, SkillResult } from './types.js';
-import { knowledgeRetrieveSkill } from '../skills/knowledgeRetrieve.js';
-import { answerGenerateSkill } from '../skills/answerGenerate.js';
+import { getKodaXOrchestrator } from '../services/KodaXOrchestrator.js';
+import { getWorkspaceManager } from '../services/WorkspaceManager.js';
 
-const QUERY_PIPELINE: Array<{
-  name: string;
-  fn: (ctx: ExecutionContext) => Promise<SkillResult>;
-}> = [
-  { name: '知识检索', fn: knowledgeRetrieveSkill },
-  { name: '答案生成', fn: answerGenerateSkill },
-];
+const QUERY_STEP_NAMES = ['知识检索', '答案生成'];
 
-export { QUERY_PIPELINE };
+export { QUERY_STEP_NAMES as QUERY_PIPELINE };
 
 export class QueryWorker {
   config: AgentConfig = {
     id: `query-worker-${Date.now().toString(36)}`,
     name: '知识检索数字员工',
     role: 'worker',
-    description: '负责从知识图谱中检索信息并生成回答',
-    skills: ['knowledge-retrieve', 'answer-generate'],
+    description: '由 KodaX 编排，通过 graphify skill.md query 模式检索知识图谱并生成回答',
+    skills: ['kodax-graphify-query'],
     model: 'minimax',
   };
 
   async execute(ctx: ExecutionContext): Promise<boolean> {
-    for (let i = 0; i < QUERY_PIPELINE.length; i++) {
-      const { name, fn } = QUERY_PIPELINE[i];
+    const totalSteps = QUERY_STEP_NAMES.length;
+    const question = ctx.query ?? ctx.taskId;
 
-      ctx.onProgress({
-        agentId: this.config.id,
-        role: 'worker',
-        content: `Step ${i + 1}/${QUERY_PIPELINE.length} · ${name} — 开始执行`,
-        timestamp: new Date().toISOString(),
-        metadata: { stepIndex: i, skillName: name },
-      });
+    ctx.onProgress({
+      agentId: this.config.id,
+      role: 'worker',
+      content: `Step 1/${totalSteps} · ${QUERY_STEP_NAMES[0]} — 开始执行`,
+      timestamp: new Date().toISOString(),
+      metadata: { stepIndex: 0, skillName: QUERY_STEP_NAMES[0] },
+    });
 
-      const result = await fn(ctx);
-      ctx.previousResults.push(result);
-      ctx.onStepComplete(i, result);
+    const ws = getWorkspaceManager();
+    const orchestrator = getKodaXOrchestrator();
 
-      ctx.onProgress({
-        agentId: this.config.id,
-        role: 'worker',
-        content: `Step ${i + 1}/${QUERY_PIPELINE.length} · ${name} — ${result.status === 'success' ? '完成' : '失败'} (${result.duration.toFixed(1)}s, ${result.tokenUsed} tokens)`,
-        timestamp: new Date().toISOString(),
-        metadata: { stepIndex: i, skillName: name, result: result.status },
-      });
+    const result = await orchestrator.runQuery(question, ws.workspacePath, {
+      onProgress: ctx.onProgress,
+      onStepComplete: (stepIndex: number, skillResult: SkillResult) => {
+        if (stepIndex < totalSteps) {
+          ctx.previousResults.push(skillResult);
+          ctx.onStepComplete(stepIndex, skillResult);
+        }
+      },
+    });
 
-      if (result.status === 'error') {
-        for (let j = i + 1; j < QUERY_PIPELINE.length; j++) {
-          ctx.onStepComplete(j, {
-            skillName: QUERY_PIPELINE[j].name,
+    if (!result.success) {
+      for (let j = 0; j < totalSteps; j++) {
+        const hasResult = ctx.previousResults.some((r) => r.skillName === QUERY_STEP_NAMES[j]);
+        if (!hasResult) {
+          const errorResult: SkillResult = {
+            skillName: QUERY_STEP_NAMES[j],
             status: 'error',
-            data: { error: `跳过：前置步骤「${name}」执行失败` },
+            data: { error: 'KodaX 查询执行失败' },
             tokenUsed: 0,
             duration: 0,
-          });
-          ctx.onProgress({
-            agentId: this.config.id,
-            role: 'worker',
-            content: `Step ${j + 1}/${QUERY_PIPELINE.length} · ${QUERY_PIPELINE[j].name} — 已跳过`,
-            timestamp: new Date().toISOString(),
-            metadata: { stepIndex: j, skillName: QUERY_PIPELINE[j].name, result: 'skipped' },
-          });
+          };
+          ctx.previousResults.push(errorResult);
+          ctx.onStepComplete(j, errorResult);
         }
-        return false;
       }
+      return false;
     }
+
+    const hasRetrieve = ctx.previousResults.some((r) => r.skillName === '知识检索');
+    if (!hasRetrieve) {
+      const retrieveResult: SkillResult = {
+        skillName: '知识检索',
+        status: 'success',
+        data: { source: 'kodax-graphify', resultCount: 1 },
+        tokenUsed: Math.floor(result.totalTokens * 0.6),
+        duration: 0,
+      };
+      ctx.previousResults.push(retrieveResult);
+      ctx.onStepComplete(0, retrieveResult);
+
+      ctx.onProgress({
+        agentId: this.config.id,
+        role: 'worker',
+        content: `Step 1/${totalSteps} · ${QUERY_STEP_NAMES[0]} — 完成`,
+        timestamp: new Date().toISOString(),
+        metadata: { stepIndex: 0, skillName: QUERY_STEP_NAMES[0], result: 'success' },
+      });
+    }
+
+    const hasAnswer = ctx.previousResults.some((r) => r.skillName === '答案生成');
+    if (!hasAnswer) {
+      const answerResult: SkillResult = {
+        skillName: '答案生成',
+        status: 'success',
+        data: { answer: result.answer, source: 'kodax-graphify' },
+        tokenUsed: Math.floor(result.totalTokens * 0.4),
+        duration: 0,
+      };
+      ctx.previousResults.push(answerResult);
+      ctx.onStepComplete(1, answerResult);
+
+      ctx.onProgress({
+        agentId: this.config.id,
+        role: 'worker',
+        content: `Step 2/${totalSteps} · ${QUERY_STEP_NAMES[1]} — 完成`,
+        timestamp: new Date().toISOString(),
+        metadata: { stepIndex: 1, skillName: QUERY_STEP_NAMES[1], result: 'success' },
+      });
+    }
+
     return true;
   }
 }

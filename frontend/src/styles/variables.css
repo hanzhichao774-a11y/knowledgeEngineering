@@ -1,25 +1,60 @@
 :root {
-  --bg: #0f1117;
-  --bg-secondary: #161822;
-  --bg-tertiary: #1c1f2e;
-  --bg-hover: #252840;
-  --border: #2a2d3e;
-  --text: #e4e4e7;
+  /* Typography */
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Backgrounds – deeper, more atmospheric */
+  --bg: #080c18;
+  --bg-secondary: #0c1020;
+  --bg-tertiary: #121628;
+  --bg-hover: #1a1e32;
+  --surface-elevated: #181c2e;
+
+  /* Borders & Dividers */
+  --border: #1c2040;
+  --border-subtle: #14182a;
+
+  /* Text */
+  --text: #e2e4ea;
   --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --accent: #6366f1;
-  --accent-light: #818cf8;
+  --text-muted: #5b6178;
+
+  /* Accent – teal / cyan with glow */
+  --accent: #14b8a6;
+  --accent-light: #2dd4bf;
+  --accent-bg: rgba(20, 184, 166, 0.10);
+  --glow: rgba(20, 184, 166, 0.18);
+  --glow-strong: rgba(20, 184, 166, 0.35);
+
+  /* Semantic colors */
   --green: #22c55e;
-  --green-bg: rgba(34, 197, 94, 0.12);
+  --green-bg: rgba(34, 197, 94, 0.10);
   --yellow: #eab308;
-  --yellow-bg: rgba(234, 179, 8, 0.12);
+  --yellow-bg: rgba(234, 179, 8, 0.10);
   --blue: #3b82f6;
-  --blue-bg: rgba(59, 130, 246, 0.12);
+  --blue-bg: rgba(59, 130, 246, 0.10);
   --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.10);
   --purple: #a855f7;
-  --purple-bg: rgba(168, 85, 247, 0.12);
+  --purple-bg: rgba(168, 85, 247, 0.10);
   --orange: #f97316;
-  --orange-bg: rgba(249, 115, 22, 0.12);
+  --orange-bg: rgba(249, 115, 22, 0.10);
+  --cyan: #06b6d4;
+  --cyan-bg: rgba(6, 182, 212, 0.10);
+
+  /* Radii */
   --radius: 8px;
   --radius-lg: 12px;
+  --radius-sm: 4px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px var(--glow);
+
+  /* Card glass – teal-tinted for visible frosted effect */
+  --glass-bg: rgba(8, 28, 34, 0.55);
+  --glass-bg-light: rgba(10, 32, 38, 0.40);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-blur: 18px;
 }

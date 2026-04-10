@@ -40,6 +40,8 @@ export interface ExecutionContext {
   query?: string;
   fileId?: string;
   filePath?: string;
+  fileIds?: string[];
+  filePaths?: string[];
   previousResults: SkillResult[];
   services: AgentServices;
   onProgress: (msg: AgentMessage) => void;

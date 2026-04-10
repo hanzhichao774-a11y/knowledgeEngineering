@@ -106,8 +106,8 @@ export class TaskService {
     return tasks.get(id)?.result ?? null;
   }
 
-  async createTask(title: string, description?: string, fileId?: string): Promise<Task> {
-    const hasFile = !!fileId;
+  async createTask(title: string, description?: string, fileIds?: string[]): Promise<Task> {
+    const hasFile = !!fileIds && fileIds.length > 0;
     const initialSteps = hasFile
       ? INGEST_STEPS.map((step) => ({ ...step }))
       : QUERY_STEPS.map((step) => ({ ...step }));
@@ -119,9 +119,10 @@ export class TaskService {
       steps: initialSteps,
       cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, elapsed: '0s' },
       createdAt: new Date().toISOString(),
-      fileId,
+      fileId: fileIds?.[0],
       description,
     };
+    (task as Record<string, unknown>).fileIds = fileIds;
     tasks.set(task.id, task);
 
     broadcast({ type: 'task.created', task: { ...task, result: undefined } });
@@ -142,16 +143,24 @@ export class TaskService {
     const startTime = Date.now();
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    let latestManagerMsgId: string | undefined;
 
-    const filePath = task.fileId ? getFilePath(task.fileId) : undefined;
+    const allFileIds = (task as Record<string, unknown>).fileIds as string[] | undefined;
+    const filePaths = allFileIds
+      ?.map((fid) => getFilePath(fid))
+      .filter((p): p is string => !!p);
+    const filePath = filePaths?.[0] ?? (task.fileId ? getFilePath(task.fileId) : undefined);
+    const hasFiles = !!filePaths && filePaths.length > 0;
 
     const ctx: ExecutionContext = {
       taskId,
-      intent: task.fileId ? 'ingest' : 'query',
+      intent: hasFiles || task.fileId ? 'ingest' : 'query',
       workspaceId: this.workspaceId,
       query: task.title,
       fileId: task.fileId,
       filePath,
+      fileIds: allFileIds,
+      filePaths,
       previousResults: [],
       services: {
         gateway: this.gatewayClient,
@@ -177,15 +186,22 @@ export class TaskService {
           }
           : undefined;
 
+        const isManager = msg.role === 'manager';
+        const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        if (isManager) {
+          latestManagerMsgId = msgId;
+        }
+
         broadcast({
           type: 'agent.message',
           message: {
-            id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            role: msg.role === 'manager' ? 'manager' : 'worker',
-            name: msg.role === 'manager' ? '管理智能体' : (ctx.intent === 'query' ? '知识检索 #QR-01' : '知识工程 #KE-01'),
+            id: msgId,
+            role: isManager ? 'manager' : 'worker',
+            name: isManager ? '管理智能体' : (ctx.intent === 'query' ? '知识检索 #QR-01' : '知识工程 #KE-01'),
             content: `<p>${msg.content}</p>`,
             timestamp: new Date().toTimeString().slice(0, 5),
             agentStatus,
+            parentId: isManager ? undefined : latestManagerMsgId,
           },
         });
       },
@@ -220,6 +236,17 @@ export class TaskService {
     };
 
     task.status = 'running';
+    latestManagerMsgId = `msg-mgr-${Date.now()}`;
+    broadcast({
+      type: 'agent.message',
+      message: {
+        id: latestManagerMsgId,
+        role: 'manager',
+        name: '管理智能体',
+        content: `<p>任务已接收，正在分配数字员工处理...</p>`,
+        timestamp: new Date().toTimeString().slice(0, 5),
+      },
+    });
     broadcast({ type: 'task.status', taskId, status: 'running' });
 
     await this.manager.analyzeAndDispatch(ctx);

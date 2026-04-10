@@ -1,6 +1,7 @@
 import { useResultStore } from '../../store/resultStore';
 import { ResultTab } from './ResultTab';
 import { AgentTab } from './AgentTab';
+import { SkillTab } from './SkillTab';
 import { GraphTab } from './GraphTab';
 import type { RightTab } from '../../types';
 import styles from './RightPanel.module.css';
@@ -8,6 +9,7 @@ import styles from './RightPanel.module.css';
 const tabs: { id: RightTab; icon: string; label: string }[] = [
   { id: 'result', icon: '📊', label: '产出结果' },
   { id: 'agent', icon: '🧠', label: '智能体' },
+  { id: 'skill', icon: '🛠️', label: '技能' },
   { id: 'graph', icon: '🕸️', label: '图谱' },
 ];
 
@@ -30,6 +32,7 @@ export function RightPanel() {
       <div className={styles.content}>
         {activeTab === 'result' && <ResultTab />}
         {activeTab === 'agent' && <AgentTab />}
+        {activeTab === 'skill' && <SkillTab />}
         {activeTab === 'graph' && <GraphTab />}
       </div>
     </>

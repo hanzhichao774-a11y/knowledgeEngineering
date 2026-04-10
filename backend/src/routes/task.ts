@@ -18,11 +18,12 @@ export const taskRoutes: FastifyPluginAsync<TaskRouteOptions> = async (app, opti
     return task;
   });
 
-  app.post<{ Body: { title: string; description?: string; fileId?: string } }>(
+  app.post<{ Body: { title: string; description?: string; fileId?: string; fileIds?: string[] } }>(
     '/tasks',
     async (req) => {
-      const { title, description, fileId } = req.body;
-      const task = await svc.createTask(title, description, fileId);
+      const { title, description, fileId, fileIds } = req.body;
+      const resolvedIds = fileIds ?? (fileId ? [fileId] : undefined);
+      const task = await svc.createTask(title, description, resolvedIds);
       return task;
     }
   );

@@ -12,8 +12,14 @@ export async function fetchTasks() {
   return data;
 }
 
-export async function createTask(title: string, description?: string, fileId?: string) {
-  const { data } = await api.post('/tasks', { title, description, fileId });
+export async function createTask(title: string, description?: string, fileIds?: string[]) {
+  const body: Record<string, unknown> = { title, description };
+  if (fileIds && fileIds.length === 1) {
+    body.fileId = fileIds[0];
+  } else if (fileIds && fileIds.length > 1) {
+    body.fileIds = fileIds;
+  }
+  const { data } = await api.post('/tasks', body);
   return data;
 }
 
@@ -74,6 +80,17 @@ export async function fetchHealthReport() {
 export async function resetNeo4j() {
   const { data } = await api.post('/neo4j/reset');
   return data;
+}
+
+export async function exportReport(
+  format: 'docx' | 'xlsx' | 'pdf',
+  report: { title: string; period: string; summary: string[]; metrics: Array<{ label: string; value: string; unit?: string; trend?: string }>; source: string },
+): Promise<Blob> {
+  const response = await api.post('/report/export', { format, report }, {
+    responseType: 'blob',
+    timeout: 180_000,
+  });
+  return response.data as Blob;
 }
 
 export function getWsUrl() {
