@@ -652,6 +652,30 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
+function buildParticipantBadge(agent: ParticipantAgent) {
+  const badgeByAgentId: Record<string, string> = {
+    'project-agent': 'PA',
+    'knowledge-agent': 'KE',
+    'analysis-agent': 'AA',
+    'manager-agent': 'MA',
+  };
+
+  if (badgeByAgentId[agent.id]) {
+    return badgeByAgentId[agent.id];
+  }
+
+  const parts = agent.name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return agent.name.slice(0, 2).toUpperCase();
+}
+
 function ParticipantCard({
   agent,
   expanded,
@@ -674,24 +698,30 @@ function ParticipantCard({
       </button>
 
       {expanded && (
-        <>
+        <div className="participant-panel">
           <div className="participant-card-header">
-            <div className={`participant-avatar ${toneClass(agent.statusTone)}`}>{agent.icon}</div>
-            <span className={`status-badge ${statusToneClass(agent.statusTone)}`}>{agent.status}</span>
-          </div>
+            <div className="participant-identity">
+              <div className={`participant-avatar ${toneClass(agent.statusTone)}`}>
+                {buildParticipantBadge(agent)}
+              </div>
 
-          <div className="participant-copy">
-            <h4>{agent.role}</h4>
+              <div className="participant-copy">
+                <p className="participant-role-label">当前职责</p>
+                <h4>{agent.role}</h4>
+              </div>
+            </div>
+
+            <span className={`status-badge ${statusToneClass(agent.statusTone)}`}>{agent.status}</span>
           </div>
 
           <p className="participant-description">{agent.description}</p>
 
-          <div className="tag-row">
+          <div className="participant-tag-row">
             {agent.capabilities.map((capability) => (
               <span key={capability} className={`tag ${toneClass(agent.statusTone)}`}>{capability}</span>
             ))}
           </div>
-        </>
+        </div>
       )}
     </article>
   );

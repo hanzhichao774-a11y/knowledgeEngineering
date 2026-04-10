@@ -756,9 +756,9 @@ button {
 
 .participant-card {
   display: grid;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 14px;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.58);
   box-shadow: inset 0 0 0 1px rgba(83, 71, 59, 0.08);
 }
@@ -773,7 +773,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0;
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -783,32 +783,50 @@ button {
 
 .participant-name {
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
+  line-height: 1.3;
 }
 
 .participant-chevron {
   flex: 0 0 auto;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   line-height: 1;
+}
+
+.participant-panel {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .participant-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
+.participant-identity {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .participant-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.88);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(244, 239, 231, 0.9));
+  box-shadow: inset 0 0 0 1px rgba(83, 71, 59, 0.08);
 }
 
 .participant-copy h4,
@@ -817,8 +835,18 @@ button {
   margin: 0;
 }
 
+.participant-role-label {
+  font-size: 0.66rem;
+  line-height: 1.2;
+  color: #978d82;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 .participant-copy h4 {
-  font-size: 0.84rem;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
 
 .participant-copy p,
@@ -827,7 +855,20 @@ button {
 }
 
 .participant-description {
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.participant-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.participant-tag-row .tag {
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
 }
 
 .project-card.create-card,
