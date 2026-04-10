@@ -12,6 +12,7 @@ graphify-workspace/
 # Build output
 dist/
 build/
+AgentOS/
 
 # Uploads
 uploads/
