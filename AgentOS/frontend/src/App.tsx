@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useState, type ChangeEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,14 +11,19 @@ import {
   graphMetrics,
   graphNodes,
   type ChatMessage,
+  type KnowledgeBaseSummary,
   type Metric,
   type ParticipantAgent,
+  type ProjectFileSummary,
   type ProjectSummary,
+  type ProjectTaskRecord,
   type Tone,
   type ViewKey,
 } from './mock/workspace';
 
-const PROJECT_STATE_STORAGE_KEY = 'agentos-project-state-v1';
+const PROJECT_STATE_STORAGE_KEY = 'agentos-project-state-v2';
+
+type ProjectWorkspaceTab = 'chat' | 'files' | 'tasks';
 
 interface Segment {
   label: string;
@@ -30,10 +35,34 @@ interface ProjectListResponse {
   projects: ProjectSummary[];
 }
 
+interface ProjectCreateResponse {
+  ok: boolean;
+  project?: ProjectSummary;
+  error?: string;
+}
+
 interface ProjectChatResponse {
   ok: boolean;
   projectId: string;
   message: ChatMessage;
+}
+
+interface ProjectFilesResponse {
+  ok: boolean;
+  projectId: string;
+  files: ProjectFileSummary[];
+}
+
+interface ProjectTasksResponse {
+  ok: boolean;
+  projectId: string;
+  tasks: ProjectTaskRecord[];
+}
+
+interface ProjectKnowledgeBaseResponse {
+  ok: boolean;
+  projectId: string;
+  knowledgeBase: KnowledgeBaseSummary;
 }
 
 interface ProjectConversation {
@@ -68,6 +97,19 @@ function formatMessageTime(value: string) {
   }).format(date);
 }
 
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
 function stripMarkdown(value: string) {
   return value
     .replace(/`{1,3}[^`]*`{1,3}/g, ' ')
@@ -93,7 +135,7 @@ function buildInitialConversation(project: ProjectSummary): ProjectConversation 
     id: getDefaultConversationId(project.id),
     title: '当前知识库问答',
     messages: project.chat,
-    updatedAt: lastMessage?.createdAt ?? project.knowledgeBase.updatedAt ?? new Date().toISOString(),
+    updatedAt: lastMessage?.createdAt ?? project.updatedAt ?? new Date().toISOString(),
   };
 }
 
@@ -138,7 +180,11 @@ function getViewFromPathname(pathname: string): ViewKey {
 }
 
 function isKnownPath(pathname: string) {
-  return pathname === '/' || pathname === '/graph' || pathname === '/projects' || pathname === '/agents' || Boolean(parseProjectRoute(pathname));
+  return pathname === '/'
+    || pathname === '/graph'
+    || pathname === '/projects'
+    || pathname === '/agents'
+    || Boolean(parseProjectRoute(pathname));
 }
 
 function readStoredProjectState(): StoredProjectState {
@@ -169,6 +215,45 @@ function readStoredProjectState(): StoredProjectState {
       selectedConversationIds: {},
     };
   }
+}
+
+function kbStatusLabel(status: KnowledgeBaseSummary['status']) {
+  if (status === 'ready') return '可问答';
+  if (status === 'dirty') return '待刷新';
+  if (status === 'building') return '构建中';
+  if (status === 'failed') return '构建失败';
+  return '待构建';
+}
+
+function kbStatusTone(status: KnowledgeBaseSummary['status']): Tone {
+  if (status === 'ready') return 'mint';
+  if (status === 'building') return 'blue';
+  if (status === 'failed') return 'rose';
+  return 'amber';
+}
+
+function buildParticipantBadge(agent: ParticipantAgent) {
+  const badgeByAgentId: Record<string, string> = {
+    'project-agent': 'PA',
+    'knowledge-agent': 'KE',
+    'analysis-agent': 'AA',
+    'manager-agent': 'MA',
+  };
+
+  if (badgeByAgentId[agent.id]) {
+    return badgeByAgentId[agent.id];
+  }
+
+  const parts = agent.name
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return agent.name.slice(0, 2).toUpperCase();
 }
 
 function MetricRow({ metrics }: { metrics: Metric[] }) {
@@ -266,7 +351,7 @@ function OverviewView({
           <div className="section-title">
             <div>
               <h3>首页（manager agent）负责什么</h3>
-              <p>这里只展示全局态势、系统风险和总体判断，不在首页展开具体项目操作。</p>
+              <p>这里只展示全局项目态势、知识库状态和最小迁移闭环是否已经打通。</p>
             </div>
             <span className="pill is-mint">Manager 视角</span>
           </div>
@@ -275,21 +360,21 @@ function OverviewView({
             <div className="stage-step">
               <div>
                 <strong>看全局项目态势</strong>
-                <span className="mini-stat">项目数量、知识库状态、可问答情况、系统负载</span>
+                <span className="mini-stat">项目数量、可问答数、待刷新数、构建中数</span>
               </div>
               <span className="step-index">1</span>
             </div>
             <div className="stage-step">
               <div>
                 <strong>判断去哪一层处理问题</strong>
-                <span className="mini-stat">数据入口去数据中心，项目目录去项目管理，具体问答去项目页</span>
+                <span className="mini-stat">上传资料去项目页，问答去群聊，构建与任务去 Runtime 状态</span>
               </div>
               <span className="step-index">2</span>
             </div>
             <div className="stage-step">
               <div>
-                <strong>项目页已经支持真实问答</strong>
-                <span className="mini-stat">项目页已经有独立 URL，刷新后不会再回到初始化页面</span>
+                <strong>最小闭环已落到 AgentOS runtime</strong>
+                <span className="mini-stat">项目目录、文件上传、KB 构建、任务历史、项目问答都指向本地 runtime</span>
               </div>
               <span className="step-index">3</span>
             </div>
@@ -311,31 +396,23 @@ function OverviewView({
         <section className="surface-card">
           <div className="section-title">
             <div>
-              <h3>栏目与 Agent 对应关系</h3>
-              <p>项目目录由后端提供，项目对话页走独立路由并保留会话状态。</p>
+              <h3>迁移约束</h3>
+              <p>AgentOS 现在只保留三层：Web、API、Runtime Gateway。</p>
             </div>
           </div>
 
           <div className="list-stack">
             <div className="list-item">
-              <strong>首页（manager agent）</strong>
-              <p>只看全局运行指标、风险态势和去哪一层处理问题。</p>
+              <strong>Web</strong>
+              <p>只负责项目工作台、群聊、资料列表、任务历史和状态展示。</p>
             </div>
             <div className="list-item">
-              <strong>数据中心（知识工程 agent）</strong>
-              <p>负责接入文件、查看知识目录和观察图谱构建状态。</p>
+              <strong>API</strong>
+              <p>只负责编排项目、文件、任务和知识库状态接口。</p>
             </div>
             <div className="list-item">
-              <strong>项目管理（manager agent）</strong>
-              <p>展示由 Agent OS API 返回的项目目录，而不是前端静态 mock 数据。</p>
-            </div>
-            <div className="list-item">
-              <strong>项目页（project agent）</strong>
-              <p>每个项目和每个对话都有自己的 URL，可直接刷新或分享路径。</p>
-            </div>
-            <div className="list-item">
-              <strong>Agent / Skill</strong>
-              <p>说明系统能力模块如何装配，而不是绑定某个行业场景。</p>
+              <strong>Runtime Gateway</strong>
+              <p>只负责 graphify 资产读取、构建适配和知识问答执行。</p>
             </div>
           </div>
 
@@ -375,11 +452,11 @@ function GraphView({
             </div>
 
             <div className="upload-area">
-              <strong>{asset.title === '文件导入' ? '项目目录' : '连接器目录'}</strong>
+              <strong>{asset.title === '文件导入' ? '项目资料目录' : '连接器目录'}</strong>
               <p className="subtle">
                 {asset.title === '文件导入'
-                  ? '当前先完成“后端提供项目 + 项目页问答 + URL 路由”这条链路，下一步再接真实上传。'
-                  : '前端阶段先保留视觉和结构，后面再接真实连接流程。'}
+                  ? '上传资料已经进入项目 runtime/raw，构建后会把资产写到 runtime/projects/{projectId}/graphify-out。'
+                  : '当前保留系统能力展示，项目最小闭环优先覆盖文件、构建与问答。'}
               </p>
               <div className="tag-row">
                 {asset.tags.map((tag) => (
@@ -404,15 +481,14 @@ function GraphView({
           <div className="section-title">
             <div>
               <h3>知识库数据目录</h3>
-              <p>按业务语义组织，而不是按文件格式堆砌。</p>
+              <p>每个项目自己持有 raw、graphify-out 和 meta，不再挂父级目录。</p>
             </div>
           </div>
 
           <div className="list-stack">
-            <div className="list-item"><strong>业务记录</strong><p>文档、日志、对话、表格、工单和任务历史。</p></div>
-            <div className="list-item"><strong>规则文档</strong><p>制度、规范、SOP、操作手册和审批规则。</p></div>
-            <div className="list-item"><strong>事件与反馈</strong><p>处理记录、异常事件、质检结果、历史处置经验。</p></div>
-            <div className="list-item"><strong>组织与权限关系</strong><p>负责人、执行人、审核人、权限边界和审批链路。</p></div>
+            <div className="list-item"><strong>raw/</strong><p>项目上传的主资料与补充文件。</p></div>
+            <div className="list-item"><strong>graphify-out/</strong><p>项目自己的 graph、records、health 和 reports 资产。</p></div>
+            <div className="list-item"><strong>meta/</strong><p>项目元数据、文件清单、任务历史和知识库状态。</p></div>
           </div>
         </section>
 
@@ -420,7 +496,7 @@ function GraphView({
           <div className="section-title">
             <div>
               <h3>项目图谱视图</h3>
-              <p>强调“关系可解释、可调用、可维护”，而不是把图画得复杂。</p>
+              <p>强调关系可解释、状态可跟踪、构建可重放。</p>
             </div>
             <span className="pill is-mint">图谱关系</span>
           </div>
@@ -438,16 +514,16 @@ function GraphView({
         <section className="surface-card">
           <div className="section-title">
             <div>
-              <h3>项目状态</h3>
-              <p>当前已经把“前端读取后端项目目录 + 项目页发起问答 + 刷新保持 URL”打通。</p>
+              <h3>迁移状态</h3>
+              <p>现在前端读真实项目目录，项目页读真实文件和任务流。</p>
             </div>
           </div>
 
           <div className="tiny-kpi">
             <div className="row"><span>后端项目</span><strong>{projects.length}</strong></div>
-            <div className="row"><span>可问答</span><strong>{projects.filter((project) => project.status === '可问答').length}</strong></div>
-            <div className="row"><span>挂载知识库</span><strong>{projects[0]?.knowledgeBase.label ?? '--'}</strong></div>
-            <div className="row"><span>当前阶段</span><strong>路由已接通</strong></div>
+            <div className="row"><span>可问答</span><strong>{projects.filter((project) => project.knowledgeBase.status === 'ready').length}</strong></div>
+            <div className="row"><span>待刷新</span><strong>{projects.filter((project) => project.knowledgeBase.status === 'dirty').length}</strong></div>
+            <div className="row"><span>构建中</span><strong>{projects.filter((project) => project.knowledgeBase.status === 'building').length}</strong></div>
           </div>
         </section>
       </div>
@@ -463,6 +539,8 @@ function ProjectsView({
   openProject,
   refreshProjects,
   isLoading,
+  onCreateProject,
+  isCreatingProject,
 }: {
   metrics: Metric[];
   visibleProjects: ProjectSummary[];
@@ -471,20 +549,60 @@ function ProjectsView({
   openProject: (projectId: string) => void;
   refreshProjects: () => void;
   isLoading: boolean;
+  onCreateProject: (payload: { name: string; description: string }) => Promise<string | null>;
+  isCreatingProject: boolean;
 }) {
+  const [projectName, setProjectName] = useState('');
+  const [projectDescription, setProjectDescription] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+
   return (
     <div className="view">
       <MetricRow metrics={metrics} />
 
       <section className="portfolio-grid">
         <article className="project-card create-card">
-          <div className="card-avatar">↻</div>
-          <h4>同步后端项目</h4>
-          <p>项目管理页的数据由 Agent OS API 提供，当前项目页已经可以直接进入问答。</p>
-          <div className="card-actions">
-            <button className="button" type="button" onClick={refreshProjects}>
-              {isLoading ? '同步中...' : '刷新项目列表'}
-            </button>
+          <div className="card-avatar">+</div>
+          <h4>创建项目</h4>
+          <p>新项目会自动创建 `raw / graphify-out / meta` 目录，并进入项目工作台。</p>
+          <div className="project-create-form">
+            <input
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="项目名称"
+            />
+            <textarea
+              value={projectDescription}
+              onChange={(event) => setProjectDescription(event.target.value)}
+              placeholder="项目说明（可选）"
+              rows={3}
+            />
+            <div className="card-actions">
+              <button
+                className="button"
+                type="button"
+                disabled={isCreatingProject || projectName.trim().length === 0}
+                onClick={async () => {
+                  setCreateError(null);
+                  const projectId = await onCreateProject({
+                    name: projectName,
+                    description: projectDescription,
+                  });
+                  if (!projectId) {
+                    setCreateError('项目创建失败');
+                    return;
+                  }
+                  setProjectName('');
+                  setProjectDescription('');
+                }}
+              >
+                {isCreatingProject ? '创建中...' : '创建项目'}
+              </button>
+              <button className="button-secondary" type="button" onClick={refreshProjects}>
+                {isLoading ? '同步中...' : '刷新项目列表'}
+              </button>
+            </div>
+            {createError && <div className="chat-error">{createError}</div>}
           </div>
         </article>
 
@@ -509,12 +627,16 @@ function ProjectsView({
 
             <div className="list-stack">
               <div className="list-item">
-                <strong>项目源文件</strong>
-                <p>{project.fileName}</p>
+                <strong>项目资料</strong>
+                <p>{project.fileCount > 0 ? `${project.fileCount} 个文件` : '暂无上传文件'}</p>
               </div>
               <div className="list-item">
-                <strong>当前挂载知识库</strong>
+                <strong>当前知识库</strong>
                 <p>{project.knowledgeBase.label}</p>
+              </div>
+              <div className="list-item">
+                <strong>任务历史</strong>
+                <p>{project.taskCount} 条</p>
               </div>
             </div>
 
@@ -529,8 +651,8 @@ function ProjectsView({
         <section className="surface-card empty-state">
           <div className="section-title">
             <div>
-              <h3>后端当前还没有项目</h3>
-              <p>等接上创建项目或上传接口后，这里会展示新的项目目录。</p>
+              <h3>当前还没有项目</h3>
+              <p>创建项目后即可进入独立工作台，上传文件并触发知识库构建。</p>
             </div>
           </div>
           <div className="quick-links">
@@ -544,7 +666,7 @@ function ProjectsView({
           <div className="section-title">
             <div>
               <h3>待办与告警</h3>
-              <p>这里展示当前后端项目返回的状态提示和知识库提醒。</p>
+              <p>这里展示真实项目返回的任务提醒和知识库状态。</p>
             </div>
           </div>
 
@@ -557,7 +679,7 @@ function ProjectsView({
             )) : (
               <div className="audit-item">
                 <strong>暂无项目告警</strong>
-                <p>等后端返回项目后，这里会展示项目级待办与提示。</p>
+                <p>项目创建后，这里会展示上传、构建和 snapshot 相关提醒。</p>
               </div>
             )}
           </div>
@@ -652,30 +774,6 @@ function ChatBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-function buildParticipantBadge(agent: ParticipantAgent) {
-  const badgeByAgentId: Record<string, string> = {
-    'project-agent': 'PA',
-    'knowledge-agent': 'KE',
-    'analysis-agent': 'AA',
-    'manager-agent': 'MA',
-  };
-
-  if (badgeByAgentId[agent.id]) {
-    return badgeByAgentId[agent.id];
-  }
-
-  const parts = agent.name
-    .split(/\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
-
-  return agent.name.slice(0, 2).toUpperCase();
-}
-
 function ParticipantCard({
   agent,
   expanded,
@@ -727,7 +825,283 @@ function ParticipantCard({
   );
 }
 
-function ProjectView({
+function ProjectStatusBanner({ knowledgeBase }: { knowledgeBase: KnowledgeBaseSummary }) {
+  return (
+    <div className={`workspace-banner ${toneClass(kbStatusTone(knowledgeBase.status))}`}>
+      <strong>{kbStatusLabel(knowledgeBase.status)}</strong>
+      <span>
+        Snapshot {knowledgeBase.snapshotId ?? 'missing'} · Freshness {knowledgeBase.freshness.status}
+      </span>
+      {knowledgeBase.status === 'dirty' && knowledgeBase.dirtyReason && (
+        <p>{knowledgeBase.dirtyReason}</p>
+      )}
+      {knowledgeBase.status === 'failed' && knowledgeBase.lastError && (
+        <p>{knowledgeBase.lastError}</p>
+      )}
+    </div>
+  );
+}
+
+function ProjectFilesWorkspace({
+  project,
+  files,
+  knowledgeBase,
+  isLoadingRuntime,
+  isUploading,
+  isBuilding,
+  runtimeError,
+  onUploadFiles,
+  onBuildKnowledgeBase,
+  onRefreshRuntime,
+}: {
+  project: ProjectSummary;
+  files: ProjectFileSummary[];
+  knowledgeBase: KnowledgeBaseSummary;
+  isLoadingRuntime: boolean;
+  isUploading: boolean;
+  isBuilding: boolean;
+  runtimeError: string | null;
+  onUploadFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBuildKnowledgeBase: () => void;
+  onRefreshRuntime: () => void;
+}) {
+  return (
+    <div className="project-workbench">
+      <section className="surface-card conversation-sidebar">
+        <div className="conversation-sidebar-header">
+          <div>
+            <h3>项目资料</h3>
+            <p>{project.name}</p>
+          </div>
+          <button className="button-secondary" type="button" onClick={onRefreshRuntime}>
+            {isLoadingRuntime ? '刷新中...' : '刷新'}
+          </button>
+        </div>
+
+        <div className="conversation-list">
+          {files.length > 0 ? files.map((file) => (
+            <div key={file.id} className="conversation-item static-item">
+              <div className="conversation-item-header">
+                <strong>{file.name}</strong>
+                <span>{file.sizeLabel}</span>
+              </div>
+              <p>{formatDateTime(file.uploadedAt)} · {file.extension.toUpperCase()}</p>
+            </div>
+          )) : (
+            <div className="conversation-empty">
+              <strong>暂无项目资料</strong>
+              <p>上传项目主文档、日志或表格后，知识库状态会自动标记为待构建或待刷新。</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="surface-card conversation-panel">
+        <div className="conversation-panel-header">
+          <div>
+            <h3>资料上传与知识库构建</h3>
+            <p>文件直接写入项目 runtime/raw，build 成功后更新项目自己的 graphify-out。</p>
+          </div>
+          <div className="conversation-panel-meta">
+            <span className={`pill ${toneClass(kbStatusTone(knowledgeBase.status))}`}>{kbStatusLabel(knowledgeBase.status)}</span>
+            <span className="pill">{knowledgeBase.freshness.status}</span>
+          </div>
+        </div>
+
+        <ProjectStatusBanner knowledgeBase={knowledgeBase} />
+
+        <div className="workspace-toolbar">
+          <label className="button-secondary file-upload-button">
+            {isUploading ? '上传中...' : '上传文件'}
+            <input type="file" multiple onChange={onUploadFiles} disabled={isUploading} />
+          </label>
+          <button
+            className="button"
+            type="button"
+            disabled={isBuilding || !knowledgeBase.buildAvailable}
+            onClick={onBuildKnowledgeBase}
+          >
+            {isBuilding || knowledgeBase.status === 'building' ? '构建中...' : '构建知识库'}
+          </button>
+          <button className="button-secondary" type="button" onClick={onRefreshRuntime}>
+            刷新状态
+          </button>
+        </div>
+
+        {!knowledgeBase.buildAvailable && (
+          <div className="chat-error">
+            当前未配置 graphify build adapter。你仍然可以读取已有 snapshot，但无法从这里触发新 build。
+          </div>
+        )}
+
+        {runtimeError && <div className="chat-error">{runtimeError}</div>}
+
+        <div className="workspace-grid">
+          <section className="surface-card nested-surface">
+            <div className="section-title">
+              <div>
+                <h3>知识库状态</h3>
+                <p>项目级 snapshot、freshness 和构建状态都从后端返回。</p>
+              </div>
+            </div>
+
+            <div className="tiny-kpi">
+              <div className="row"><span>知识状态</span><strong>{kbStatusLabel(knowledgeBase.status)}</strong></div>
+              <div className="row"><span>Snapshot</span><strong>{knowledgeBase.snapshotId ?? '--'}</strong></div>
+              <div className="row"><span>节点 / 记录</span><strong>{knowledgeBase.nodeCount} / {knowledgeBase.recordCount}</strong></div>
+              <div className="row"><span>上次构建</span><strong>{knowledgeBase.lastBuildAt ? formatDateTime(knowledgeBase.lastBuildAt) : '--'}</strong></div>
+            </div>
+          </section>
+
+          <section className="surface-card nested-surface">
+            <div className="section-title">
+              <div>
+                <h3>迁移约束</h3>
+                <p>上传只改 dirty，只有 build 成功才切换 ready。</p>
+              </div>
+            </div>
+
+            <div className="list-stack">
+              <div className="list-item"><strong>上传文件</strong><p>直接写入 <code>runtime/projects/&lt;projectId&gt;/raw</code>。</p></div>
+              <div className="list-item"><strong>知识状态</strong><p>`empty / dirty / building / ready / failed` 全部从 API 返回。</p></div>
+              <div className="list-item"><strong>问答策略</strong><p>dirty 状态仍可使用上一版 snapshot 问答，但会提示待刷新。</p></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside className="surface-card participant-rail">
+        <div className="participant-rail-header">
+          <div>
+            <h3>参与 Agent</h3>
+            <p>资料上传和 build 仍由 Runtime Gateway 接管。</p>
+          </div>
+          <span className="pill is-blue">{project.participantAgents.length} 个</span>
+        </div>
+
+        <div className="participant-grid">
+          {project.participantAgents.map((agent) => (
+            <ParticipantCard
+              key={agent.id}
+              agent={agent}
+              expanded={agent.id === 'knowledge-agent'}
+              onToggle={() => undefined}
+            />
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function ProjectTasksWorkspace({
+  project,
+  tasks,
+  knowledgeBase,
+  isLoadingRuntime,
+  runtimeError,
+  onRefreshRuntime,
+}: {
+  project: ProjectSummary;
+  tasks: ProjectTaskRecord[];
+  knowledgeBase: KnowledgeBaseSummary;
+  isLoadingRuntime: boolean;
+  runtimeError: string | null;
+  onRefreshRuntime: () => void;
+}) {
+  return (
+    <div className="project-workbench">
+      <section className="surface-card conversation-sidebar">
+        <div className="conversation-sidebar-header">
+          <div>
+            <h3>任务历史</h3>
+            <p>{project.name}</p>
+          </div>
+          <button className="button-secondary" type="button" onClick={onRefreshRuntime}>
+            {isLoadingRuntime ? '刷新中...' : '刷新'}
+          </button>
+        </div>
+
+        <div className="conversation-sidebar-footer">
+          <div className="sidebar-kb-row">
+            <span>知识状态</span>
+            <strong>{kbStatusLabel(knowledgeBase.status)}</strong>
+          </div>
+          <div className="sidebar-kb-row">
+            <span>任务数量</span>
+            <strong>{tasks.length}</strong>
+          </div>
+          <div className="sidebar-kb-row">
+            <span>最近构建</span>
+            <strong>{knowledgeBase.lastBuildAt ? formatMessageTime(knowledgeBase.lastBuildAt) : '--'}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="surface-card conversation-panel">
+        <div className="conversation-panel-header">
+          <div>
+            <h3>后端任务流</h3>
+            <p>项目创建、文件上传、知识库构建和迁移都写入项目自己的任务历史。</p>
+          </div>
+          <div className="conversation-panel-meta">
+            <span className={`pill ${toneClass(kbStatusTone(knowledgeBase.status))}`}>{kbStatusLabel(knowledgeBase.status)}</span>
+            <span className="pill">{tasks.length} 条</span>
+          </div>
+        </div>
+
+        <ProjectStatusBanner knowledgeBase={knowledgeBase} />
+
+        {runtimeError && <div className="chat-error">{runtimeError}</div>}
+
+        <div className="task-list">
+          {tasks.length > 0 ? tasks.map((task) => (
+            <article key={task.id} className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <strong>{task.title}</strong>
+                  <p>{task.type}</p>
+                </div>
+                <span className={`status-badge ${statusToneClass(task.status === 'failed' ? 'rose' : task.status === 'running' ? 'blue' : 'mint')}`}>
+                  {task.status}
+                </span>
+              </div>
+              <p>{task.message}</p>
+              <div className="message-meta">
+                <span className="meta-pill">创建 {formatDateTime(task.createdAt)}</span>
+                <span className="meta-pill">更新 {formatDateTime(task.updatedAt)}</span>
+              </div>
+            </article>
+          )) : (
+            <div className="conversation-empty">
+              <strong>暂无任务历史</strong>
+              <p>项目创建后，文件上传和知识库构建会自动在这里留下记录。</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <aside className="surface-card participant-rail">
+        <div className="participant-rail-header">
+          <div>
+            <h3>任务说明</h3>
+            <p>任务历史来自 API，不再是静态项目摘要。</p>
+          </div>
+          <span className="pill is-blue">{tasks.length} 条</span>
+        </div>
+
+        <div className="list-stack">
+          <div className="list-item"><strong>project.created</strong><p>项目目录初始化完成。</p></div>
+          <div className="list-item"><strong>file.uploaded</strong><p>项目资料已写入 raw 目录，并把知识库状态改成 dirty 或 empty。</p></div>
+          <div className="list-item"><strong>kb.build</strong><p>Runtime Gateway 正在执行 graphify build 并回写状态。</p></div>
+          <div className="list-item"><strong>kb.migrated</strong><p>历史 snapshot 已从 legacy 工作区迁入本地 runtime。</p></div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function ProjectChatWorkspace({
   project,
   conversations,
   selectedConversationId,
@@ -738,6 +1112,7 @@ function ProjectView({
   onCreateConversation,
   isSending,
   chatError,
+  knowledgeBase,
 }: {
   project: ProjectSummary;
   conversations: ProjectConversation[];
@@ -749,6 +1124,7 @@ function ProjectView({
   onCreateConversation: () => void;
   isSending: boolean;
   chatError: string | null;
+  knowledgeBase: KnowledgeBaseSummary;
 }) {
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId)
     ?? conversations[0]
@@ -756,144 +1132,236 @@ function ProjectView({
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(project.participantAgents[0]?.id ?? null);
 
   return (
-    <div className="view project-page-view">
-      <div className="project-workbench">
-        <section className="surface-card conversation-sidebar">
-          <div className="conversation-sidebar-header">
-            <div>
-              <h3>历史对话</h3>
-              <p>{project.name}</p>
+    <div className="project-workbench">
+      <section className="surface-card conversation-sidebar">
+        <div className="conversation-sidebar-header">
+          <div>
+            <h3>历史对话</h3>
+            <p>{project.name}</p>
+          </div>
+          <button className="button-secondary" type="button" onClick={onCreateConversation}>
+            新对话
+          </button>
+        </div>
+
+        <div className="conversation-list">
+          {conversations.map((conversation) => (
+            <button
+              key={conversation.id}
+              className={`conversation-item ${conversation.id === selectedConversation?.id ? 'active' : ''}`}
+              type="button"
+              onClick={() => onSelectConversation(conversation.id)}
+            >
+              <div className="conversation-item-header">
+                <strong>{conversation.title}</strong>
+                <span>{formatMessageTime(conversation.updatedAt)}</span>
+              </div>
+              <p>{buildConversationPreview(conversation)}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="conversation-sidebar-footer">
+          <div className="sidebar-kb-row">
+            <span>知识库</span>
+            <strong>{knowledgeBase.label}</strong>
+          </div>
+          <div className="sidebar-kb-row">
+            <span>知识状态</span>
+            <strong>{kbStatusLabel(knowledgeBase.status)}</strong>
+          </div>
+          <div className="sidebar-kb-row">
+            <span>Snapshot</span>
+            <strong>{knowledgeBase.snapshotId ?? '--'}</strong>
+          </div>
+          <div className="sidebar-kb-row">
+            <span>节点 / 记录</span>
+            <strong>{knowledgeBase.nodeCount} / {knowledgeBase.recordCount}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="surface-card conversation-panel">
+        <div className="conversation-panel-header">
+          <div>
+            <h3>{selectedConversation?.title ?? '新对话'}</h3>
+            <p>围绕项目自己的知识库提问，回答会保留 Markdown 结构和来源信息。</p>
+          </div>
+          <div className="conversation-panel-meta">
+            <span className={`pill ${toneClass(kbStatusTone(knowledgeBase.status))}`}>{kbStatusLabel(knowledgeBase.status)}</span>
+            <span className="pill">{knowledgeBase.freshness.status}</span>
+          </div>
+        </div>
+
+        <ProjectStatusBanner knowledgeBase={knowledgeBase} />
+
+        <div className="suggestion-row">
+          {project.suggestedQuestions.map((question) => (
+            <button
+              key={question}
+              className="suggestion-chip"
+              type="button"
+              disabled={isSending}
+              onClick={() => onSend(question)}
+            >
+              {question}
+            </button>
+          ))}
+        </div>
+
+        <div className="chat-thread">
+          {selectedConversation && selectedConversation.messages.length > 0 ? (
+            selectedConversation.messages.map((message) => (
+              <ChatBubble key={message.id} message={message} />
+            ))
+          ) : (
+            <div className="conversation-empty">
+              <strong>新对话已创建</strong>
+              <p>从左侧选一个历史对话，或者直接在下方输入问题开始新的会话。</p>
             </div>
-            <button className="button-secondary" type="button" onClick={onCreateConversation}>
-              新对话
+          )}
+        </div>
+
+        <div className="chat-composer">
+          <label className="chat-input-shell">
+            <textarea
+              value={draft}
+              onChange={(event) => onDraftChange(event.target.value)}
+              placeholder={`围绕“${knowledgeBase.label}”提问，例如：${project.suggestedQuestions[0] ?? '输入你的问题'}`}
+              rows={4}
+              disabled={isSending || knowledgeBase.snapshotId === null}
+            />
+          </label>
+
+          <div className="composer-actions">
+            <span className="subtle">当前会话：{selectedConversation?.title ?? '新对话'}</span>
+            <button
+              className="button"
+              type="button"
+              onClick={() => onSend()}
+              disabled={isSending || draft.trim().length === 0 || knowledgeBase.snapshotId === null}
+            >
+              {isSending ? '回答中...' : '发送问题'}
             </button>
           </div>
 
-          <div className="conversation-list">
-            {conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                className={`conversation-item ${conversation.id === selectedConversation?.id ? 'active' : ''}`}
-                type="button"
-                onClick={() => onSelectConversation(conversation.id)}
-              >
-                <div className="conversation-item-header">
-                  <strong>{conversation.title}</strong>
-                  <span>{formatMessageTime(conversation.updatedAt)}</span>
-                </div>
-                <p>{buildConversationPreview(conversation)}</p>
-              </button>
-            ))}
+          {chatError && <div className="chat-error">{chatError}</div>}
+        </div>
+      </section>
+
+      <aside className="surface-card participant-rail">
+        <div className="participant-rail-header">
+          <div>
+            <h3>参与 Agent</h3>
+            <p>当前对话中已加入或可被唤醒的 Agent 列表。</p>
           </div>
+          <span className="pill is-blue">{project.participantAgents.length} 个</span>
+        </div>
 
-          <div className="conversation-sidebar-footer">
-            <div className="sidebar-kb-row">
-              <span>知识库</span>
-              <strong>{project.knowledgeBase.label}</strong>
-            </div>
-            <div className="sidebar-kb-row">
-              <span>Snapshot</span>
-              <strong>{project.knowledgeBase.snapshotId ?? '--'}</strong>
-            </div>
-            <div className="sidebar-kb-row">
-              <span>Freshness</span>
-              <strong>{project.knowledgeBase.freshness.status}</strong>
-            </div>
-            <div className="sidebar-kb-row">
-              <span>节点 / 记录</span>
-              <strong>{project.knowledgeBase.nodeCount} / {project.knowledgeBase.recordCount}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="surface-card conversation-panel">
-          <div className="conversation-panel-header">
-            <div>
-              <h3>{selectedConversation?.title ?? '新对话'}</h3>
-              <p>围绕当前挂载知识库提问，回答会保留 Markdown 结构和来源信息。</p>
-            </div>
-            <div className="conversation-panel-meta">
-              <span className="pill is-mint">{project.knowledgeBase.label}</span>
-              <span className="pill">{project.knowledgeBase.freshness.status}</span>
-            </div>
-          </div>
-
-          <div className="suggestion-row">
-            {project.suggestedQuestions.map((question) => (
-              <button
-                key={question}
-                className="suggestion-chip"
-                type="button"
-                disabled={isSending}
-                onClick={() => onSend(question)}
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-
-          <div className="chat-thread">
-            {selectedConversation && selectedConversation.messages.length > 0 ? (
-              selectedConversation.messages.map((message) => (
-                <ChatBubble key={message.id} message={message} />
-              ))
-            ) : (
-              <div className="conversation-empty">
-                <strong>新对话已创建</strong>
-                <p>从左侧选一个历史对话，或者直接在下方输入问题开始新的会话。</p>
-              </div>
-            )}
-          </div>
-
-          <div className="chat-composer">
-            <label className="chat-input-shell">
-              <textarea
-                value={draft}
-                onChange={(event) => onDraftChange(event.target.value)}
-                placeholder={`围绕“${project.knowledgeBase.label}”提问，例如：${project.suggestedQuestions[0] ?? '输入你的问题'}`}
-                rows={4}
-                disabled={isSending}
-              />
-            </label>
-
-            <div className="composer-actions">
-              <span className="subtle">当前会话：{selectedConversation?.title ?? '新对话'}</span>
-              <button
-                className="button"
-                type="button"
-                onClick={() => onSend()}
-                disabled={isSending || draft.trim().length === 0}
-              >
-                {isSending ? '回答中...' : '发送问题'}
-              </button>
-            </div>
-
-            {chatError && <div className="chat-error">{chatError}</div>}
-          </div>
-        </section>
-
-        <aside className="surface-card participant-rail">
-          <div className="participant-rail-header">
-            <div>
-              <h3>参与 Agent</h3>
-              <p>当前对话中已加入或可被唤醒的 Agent 列表。</p>
-            </div>
-            <span className="pill is-blue">{project.participantAgents.length} 个</span>
-          </div>
-
-          <div className="participant-grid">
-            {project.participantAgents.map((agent) => (
-              <ParticipantCard
-                key={agent.id}
-                agent={agent}
-                expanded={expandedParticipantId === agent.id}
-                onToggle={() => setExpandedParticipantId((current) => current === agent.id ? null : agent.id)}
-              />
-            ))}
-          </div>
-        </aside>
-      </div>
+        <div className="participant-grid">
+          {project.participantAgents.map((agent) => (
+            <ParticipantCard
+              key={agent.id}
+              agent={agent}
+              expanded={expandedParticipantId === agent.id}
+              onToggle={() => setExpandedParticipantId((current) => current === agent.id ? null : agent.id)}
+            />
+          ))}
+        </div>
+      </aside>
     </div>
+  );
+}
+
+function ProjectView({
+  project,
+  panel,
+  conversations,
+  selectedConversationId,
+  draft,
+  onDraftChange,
+  onSend,
+  onSelectConversation,
+  onCreateConversation,
+  isSending,
+  chatError,
+  files,
+  tasks,
+  knowledgeBase,
+  isLoadingRuntime,
+  isUploading,
+  isBuilding,
+  runtimeError,
+  onUploadFiles,
+  onBuildKnowledgeBase,
+  onRefreshRuntime,
+}: {
+  project: ProjectSummary;
+  panel: ProjectWorkspaceTab;
+  conversations: ProjectConversation[];
+  selectedConversationId: string | null;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onSend: (question?: string) => void;
+  onSelectConversation: (conversationId: string) => void;
+  onCreateConversation: () => void;
+  isSending: boolean;
+  chatError: string | null;
+  files: ProjectFileSummary[];
+  tasks: ProjectTaskRecord[];
+  knowledgeBase: KnowledgeBaseSummary;
+  isLoadingRuntime: boolean;
+  isUploading: boolean;
+  isBuilding: boolean;
+  runtimeError: string | null;
+  onUploadFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  onBuildKnowledgeBase: () => void;
+  onRefreshRuntime: () => void;
+}) {
+  if (panel === 'files') {
+    return (
+      <ProjectFilesWorkspace
+        project={project}
+        files={files}
+        knowledgeBase={knowledgeBase}
+        isLoadingRuntime={isLoadingRuntime}
+        isUploading={isUploading}
+        isBuilding={isBuilding}
+        runtimeError={runtimeError}
+        onUploadFiles={onUploadFiles}
+        onBuildKnowledgeBase={onBuildKnowledgeBase}
+        onRefreshRuntime={onRefreshRuntime}
+      />
+    );
+  }
+
+  if (panel === 'tasks') {
+    return (
+      <ProjectTasksWorkspace
+        project={project}
+        tasks={tasks}
+        knowledgeBase={knowledgeBase}
+        isLoadingRuntime={isLoadingRuntime}
+        runtimeError={runtimeError}
+        onRefreshRuntime={onRefreshRuntime}
+      />
+    );
+  }
+
+  return (
+    <ProjectChatWorkspace
+      project={project}
+      conversations={conversations}
+      selectedConversationId={selectedConversationId}
+      draft={draft}
+      onDraftChange={onDraftChange}
+      onSend={onSend}
+      onSelectConversation={onSelectConversation}
+      onCreateConversation={onCreateConversation}
+      isSending={isSending}
+      chatError={chatError}
+      knowledgeBase={knowledgeBase}
+    />
   );
 }
 
@@ -902,18 +1370,78 @@ export default function App() {
   const navigate = useNavigate();
   const routeState = parseProjectRoute(location.pathname);
   const activeView = getViewFromPathname(location.pathname);
-
   const storedState = readStoredProjectState();
+
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [searchText, setSearchText] = useState('');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [projectConversations, setProjectConversations] = useState<Record<string, ProjectConversation[]>>(storedState.projectConversations);
   const [selectedConversationIds, setSelectedConversationIds] = useState<Record<string, string>>(storedState.selectedConversationIds);
   const [chatDrafts, setChatDrafts] = useState<Record<string, string>>({});
   const [chatErrors, setChatErrors] = useState<Record<string, string | null>>({});
   const [sendingConversationKey, setSendingConversationKey] = useState<string | null>(null);
+  const [projectPanels, setProjectPanels] = useState<Record<string, ProjectWorkspaceTab>>({});
+  const [projectFiles, setProjectFiles] = useState<Record<string, ProjectFileSummary[]>>({});
+  const [projectTasks, setProjectTasks] = useState<Record<string, ProjectTaskRecord[]>>({});
+  const [projectKnowledgeBases, setProjectKnowledgeBases] = useState<Record<string, KnowledgeBaseSummary>>({});
+  const [runtimeLoadingByProject, setRuntimeLoadingByProject] = useState<Record<string, boolean>>({});
+  const [runtimeErrorByProject, setRuntimeErrorByProject] = useState<Record<string, string | null>>({});
+  const [uploadingByProject, setUploadingByProject] = useState<Record<string, boolean>>({});
+  const [buildingByProject, setBuildingByProject] = useState<Record<string, boolean>>({});
   const deferredSearchText = useDeferredValue(searchText.trim().toLowerCase());
+
+  async function refreshProjects() {
+    setIsLoadingProjects(true);
+    setProjectsError(null);
+
+    try {
+      const response = await fetch('/api/projects');
+      if (!response.ok) {
+        throw new Error(`项目接口返回 ${response.status}`);
+      }
+
+      const data = (await response.json()) as ProjectListResponse;
+      setProjects(data.projects);
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  }
+
+  async function refreshProjectRuntime(projectId: string) {
+    setRuntimeLoadingByProject((current) => ({ ...current, [projectId]: true }));
+    setRuntimeErrorByProject((current) => ({ ...current, [projectId]: null }));
+
+    try {
+      const [filesResponse, tasksResponse, knowledgeBaseResponse] = await Promise.all([
+        fetch(`/api/projects/${projectId}/files`),
+        fetch(`/api/projects/${projectId}/tasks`),
+        fetch(`/api/projects/${projectId}/kb/status`),
+      ]);
+
+      if (!filesResponse.ok || !tasksResponse.ok || !knowledgeBaseResponse.ok) {
+        throw new Error('项目 runtime 状态加载失败');
+      }
+
+      const filesPayload = (await filesResponse.json()) as ProjectFilesResponse;
+      const tasksPayload = (await tasksResponse.json()) as ProjectTasksResponse;
+      const kbPayload = (await knowledgeBaseResponse.json()) as ProjectKnowledgeBaseResponse;
+
+      setProjectFiles((current) => ({ ...current, [projectId]: filesPayload.files }));
+      setProjectTasks((current) => ({ ...current, [projectId]: tasksPayload.tasks }));
+      setProjectKnowledgeBases((current) => ({ ...current, [projectId]: kbPayload.knowledgeBase }));
+    } catch (error) {
+      setRuntimeErrorByProject((current) => ({
+        ...current,
+        [projectId]: error instanceof Error ? error.message : '项目 runtime 状态加载失败',
+      }));
+    } finally {
+      setRuntimeLoadingByProject((current) => ({ ...current, [projectId]: false }));
+    }
+  }
 
   useEffect(() => {
     if (!isKnownPath(location.pathname)) {
@@ -922,24 +1450,7 @@ export default function App() {
   }, [location.pathname, navigate]);
 
   useEffect(() => {
-    void (async () => {
-      setIsLoadingProjects(true);
-      setProjectsError(null);
-
-      try {
-        const response = await fetch('/api/projects');
-        if (!response.ok) {
-          throw new Error(`项目接口返回 ${response.status}`);
-        }
-
-        const data = (await response.json()) as ProjectListResponse;
-        setProjects(data.projects);
-      } catch (error) {
-        setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
-      } finally {
-        setIsLoadingProjects(false);
-      }
-    })();
+    void refreshProjects();
   }, []);
 
   useEffect(() => {
@@ -958,6 +1469,16 @@ export default function App() {
       for (const project of projects) {
         if (!next[project.id]) {
           next[project.id] = getDefaultConversationId(project.id);
+        }
+      }
+      return next;
+    });
+
+    setProjectKnowledgeBases((current) => {
+      const next = { ...current };
+      for (const project of projects) {
+        if (!next[project.id]) {
+          next[project.id] = project.knowledgeBase;
         }
       }
       return next;
@@ -985,6 +1506,27 @@ export default function App() {
   const selectedProject = routeState
     ? projects.find((project) => project.id === routeState.projectId) ?? null
     : null;
+
+  useEffect(() => {
+    if (!selectedProject) return;
+    void refreshProjectRuntime(selectedProject.id);
+  }, [selectedProject?.id]);
+
+  const knowledgeBase = selectedProject
+    ? projectKnowledgeBases[selectedProject.id] ?? selectedProject.knowledgeBase
+    : null;
+
+  useEffect(() => {
+    if (!selectedProject || !knowledgeBase || knowledgeBase.status !== 'building') return;
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        refreshProjects(),
+        refreshProjectRuntime(selectedProject.id),
+      ]);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [knowledgeBase?.status, selectedProject?.id]);
+
   const selectedConversations = selectedProject
     ? (projectConversations[selectedProject.id] ?? [buildInitialConversation(selectedProject)])
     : [];
@@ -995,7 +1537,6 @@ export default function App() {
         : selectedConversationIds[selectedProject.id] ?? selectedConversations[0]?.id ?? null
     )
     : null;
-  const selectedConversation = selectedConversations.find((conversation) => conversation.id === effectiveConversationId) ?? selectedConversations[0] ?? null;
 
   useEffect(() => {
     if (activeView !== 'project' || isLoadingProjects) return;
@@ -1025,6 +1566,7 @@ export default function App() {
         project.description,
         project.fileName,
         project.knowledgeBase.label,
+        project.status,
         ...project.suggestedQuestions,
       ].join(' ').toLowerCase();
       return candidate.includes(deferredSearchText);
@@ -1080,11 +1622,38 @@ export default function App() {
     }));
   };
 
+  const createProject = async (payload: { name: string; description: string }) => {
+    setIsCreatingProject(true);
+    try {
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json()) as ProjectCreateResponse;
+      if (!response.ok || !data.project) {
+        throw new Error(data.error ?? `项目接口返回 ${response.status}`);
+      }
+
+      setProjects((current) => [data.project!, ...current.filter((project) => project.id !== data.project!.id)]);
+      navigateToProject(data.project.id);
+      return data.project.id;
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : '项目创建失败');
+      return null;
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
   const sendQuestion = async (project: ProjectSummary, quickQuestion?: string) => {
+    const currentKnowledgeBase = projectKnowledgeBases[project.id] ?? project.knowledgeBase;
     const conversationId = effectiveConversationId ?? getDefaultConversationId(project.id);
     const draftKey = `${project.id}:${conversationId}`;
     const question = (quickQuestion ?? chatDrafts[draftKey] ?? '').trim();
-    if (!question || sendingConversationKey === draftKey) return;
+    if (!question || sendingConversationKey === draftKey || currentKnowledgeBase.snapshotId === null) return;
 
     const now = new Date().toISOString();
     const userMessage: ChatMessage = {
@@ -1152,6 +1721,75 @@ export default function App() {
     }
   };
 
+  const uploadFiles = async (projectId: string, event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingByProject((current) => ({ ...current, [projectId]: true }));
+    setRuntimeErrorByProject((current) => ({ ...current, [projectId]: null }));
+
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append('files', file));
+
+      const response = await fetch(`/api/projects/${projectId}/files`, {
+        method: 'POST',
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null) as { error?: string; project?: ProjectSummary } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error ?? `上传接口返回 ${response.status}`);
+      }
+
+      if (payload?.project) {
+        setProjects((current) => current.map((project) => project.id === projectId ? payload.project! : project));
+      } else {
+        await refreshProjects();
+      }
+
+      await refreshProjectRuntime(projectId);
+    } catch (error) {
+      setRuntimeErrorByProject((current) => ({
+        ...current,
+        [projectId]: error instanceof Error ? error.message : '文件上传失败',
+      }));
+    } finally {
+      setUploadingByProject((current) => ({ ...current, [projectId]: false }));
+      event.target.value = '';
+    }
+  };
+
+  const buildKnowledgeBase = async (projectId: string) => {
+    setBuildingByProject((current) => ({ ...current, [projectId]: true }));
+    setRuntimeErrorByProject((current) => ({ ...current, [projectId]: null }));
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/kb/build`, {
+        method: 'POST',
+      });
+      const payload = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error ?? `构建接口返回 ${response.status}`);
+      }
+
+      await Promise.all([
+        refreshProjects(),
+        refreshProjectRuntime(projectId),
+      ]);
+    } catch (error) {
+      setRuntimeErrorByProject((current) => ({
+        ...current,
+        [projectId]: error instanceof Error ? error.message : '知识库构建失败',
+      }));
+    } finally {
+      setBuildingByProject((current) => ({ ...current, [projectId]: false }));
+    }
+  };
+
+  const selectedProjectPanel = selectedProject
+    ? (projectPanels[selectedProject.id] ?? 'chat')
+    : 'chat';
+
   const segmentsByView: Record<ViewKey, Segment[]> = {
     overview: [
       { label: '总览', active: true },
@@ -1174,9 +1812,21 @@ export default function App() {
       { label: 'Skills' },
     ],
     project: [
-      { label: '群聊', active: true },
-      { label: '证据链' },
-      { label: '任务历史' },
+      {
+        label: '群聊',
+        active: selectedProjectPanel === 'chat',
+        onClick: () => selectedProject && setProjectPanels((current) => ({ ...current, [selectedProject.id]: 'chat' })),
+      },
+      {
+        label: '项目资料',
+        active: selectedProjectPanel === 'files',
+        onClick: () => selectedProject && setProjectPanels((current) => ({ ...current, [selectedProject.id]: 'files' })),
+      },
+      {
+        label: '任务历史',
+        active: selectedProjectPanel === 'tasks',
+        onClick: () => selectedProject && setProjectPanels((current) => ({ ...current, [selectedProject.id]: 'tasks' })),
+      },
     ],
   };
 
@@ -1194,7 +1844,7 @@ export default function App() {
     projects: {
       eyebrow: 'Manager Agent',
       title: '项目管理（manager agent）',
-      description: '这里的项目列表已经切到 Agent OS API 返回的数据，不再使用前端本地项目 mock。',
+      description: '这里的项目列表和状态完全来自 Agent OS API，不再使用前端本地项目 mock。',
     },
     agents: {
       eyebrow: 'Capability Matrix',
@@ -1205,7 +1855,7 @@ export default function App() {
       eyebrow: 'Project Agent',
       title: selectedProject ? `${selectedProject.name}（project agent）` : '项目页（project agent）',
       description: selectedProject
-        ? '这是由 Agent OS API 返回的项目工作区。当前 URL 会保留项目和对话上下文，刷新后仍停留在当前页面。'
+        ? '每个项目都对应自己的 runtime 目录，群聊、项目资料和任务历史都围绕这个项目展开。'
         : '当前还没有项目，请先同步后端项目列表。',
     },
   };
@@ -1227,20 +1877,7 @@ export default function App() {
           </div>
         </div>
 
-        <button className="primary-ghost" type="button" onClick={() => void (async () => {
-          setIsLoadingProjects(true);
-          setProjectsError(null);
-          try {
-            const response = await fetch('/api/projects');
-            if (!response.ok) throw new Error(`项目接口返回 ${response.status}`);
-            const data = (await response.json()) as ProjectListResponse;
-            setProjects(data.projects);
-          } catch (error) {
-            setProjectsError(error instanceof Error ? error.message : '项目列表加载失败');
-          } finally {
-            setIsLoadingProjects(false);
-          }
-        })()}>
+        <button className="primary-ghost" type="button" onClick={() => void refreshProjects()}>
           <span>↻</span>
           {isLoadingProjects ? '同步中...' : '同步项目'}
         </button>
@@ -1284,7 +1921,7 @@ export default function App() {
           <div className="user-avatar">S</div>
           <div>
             <strong>samhar</strong>
-            <p>产品负责人 · 路由已接通</p>
+            <p>产品负责人 · 迁移闭环已接入</p>
           </div>
         </div>
       </aside>
@@ -1319,79 +1956,71 @@ export default function App() {
                   <p>{projectsError}</p>
                 </div>
               </div>
-              <div className="quick-links">
-                <button className="button" type="button" onClick={() => navigate('/')}>返回首页</button>
-              </div>
             </section>
           )}
 
-          {activeView === 'overview' && (
+          {!isLoadingProjects && activeView === 'overview' && (
             <OverviewView
               metrics={overviewMetrics}
               hasProjects={projects.length > 0}
               openProjects={() => navigate('/projects')}
               openGraph={() => navigate('/graph')}
               openAgents={() => navigate('/agents')}
-              openLatestProject={() => {
-                const project = projects[0];
-                if (project) navigateToProject(project.id);
-              }}
-              refreshProjects={() => navigate(0)}
+              openLatestProject={() => projects[0] && navigateToProject(projects[0].id)}
+              refreshProjects={() => void refreshProjects()}
               isLoading={isLoadingProjects}
             />
           )}
 
-          {activeView === 'graph' && (
+          {!isLoadingProjects && activeView === 'graph' && (
             <GraphView
               openProjects={() => navigate('/projects')}
-              refreshProjects={() => navigate(0)}
+              refreshProjects={() => void refreshProjects()}
               projects={projects}
               isLoading={isLoadingProjects}
             />
           )}
 
-          {activeView === 'projects' && (
+          {!isLoadingProjects && activeView === 'projects' && (
             <ProjectsView
               metrics={overviewMetrics}
               visibleProjects={visibleProjects}
               projectAlerts={projectAlerts}
               issueDistribution={issueDistribution}
               openProject={navigateToProject}
-              refreshProjects={() => navigate(0)}
+              refreshProjects={() => void refreshProjects()}
               isLoading={isLoadingProjects}
+              onCreateProject={createProject}
+              isCreatingProject={isCreatingProject}
             />
           )}
 
-          {activeView === 'agents' && <AgentsView />}
+          {!isLoadingProjects && activeView === 'agents' && <AgentsView />}
 
-          {activeView === 'project' && selectedProject && (
+          {!isLoadingProjects && activeView === 'project' && selectedProject && knowledgeBase && (
             <ProjectView
-              key={selectedProject.id}
               project={selectedProject}
+              panel={selectedProjectPanel}
               conversations={selectedConversations}
-              selectedConversationId={selectedConversation?.id ?? null}
-              draft={selectedConversation ? (chatDrafts[`${selectedProject.id}:${selectedConversation.id}`] ?? '') : ''}
-              onDraftChange={(value) => updateDraft(selectedProject.id, selectedConversation?.id ?? null, value)}
+              selectedConversationId={effectiveConversationId}
+              draft={chatDrafts[`${selectedProject.id}:${effectiveConversationId ?? ''}`] ?? ''}
+              onDraftChange={(value) => updateDraft(selectedProject.id, effectiveConversationId, value)}
               onSend={(question) => void sendQuestion(selectedProject, question)}
               onSelectConversation={(conversationId) => selectConversation(selectedProject.id, conversationId)}
               onCreateConversation={() => createConversation(selectedProject.id)}
-              isSending={selectedConversation ? sendingConversationKey === `${selectedProject.id}:${selectedConversation.id}` : false}
-              chatError={selectedConversation ? (chatErrors[`${selectedProject.id}:${selectedConversation.id}`] ?? null) : null}
+              isSending={sendingConversationKey === `${selectedProject.id}:${effectiveConversationId ?? ''}`}
+              chatError={chatErrors[`${selectedProject.id}:${effectiveConversationId ?? ''}`] ?? null}
+              files={projectFiles[selectedProject.id] ?? []}
+              tasks={projectTasks[selectedProject.id] ?? []}
+              knowledgeBase={knowledgeBase}
+              isLoadingRuntime={runtimeLoadingByProject[selectedProject.id] ?? false}
+              isUploading={uploadingByProject[selectedProject.id] ?? false}
+              isBuilding={buildingByProject[selectedProject.id] ?? false}
+              runtimeError={runtimeErrorByProject[selectedProject.id] ?? null}
+              onUploadFiles={(event) => void uploadFiles(selectedProject.id, event)}
+              onBuildKnowledgeBase={() => void buildKnowledgeBase(selectedProject.id)}
+              onRefreshRuntime={() => void refreshProjectRuntime(selectedProject.id)}
             />
-          )}
-
-          {activeView === 'project' && !selectedProject && !isLoadingProjects && (
-            <section className="surface-card empty-state">
-              <div className="section-title">
-                <div>
-                  <h3>当前项目不存在</h3>
-                  <p>项目路径无效或项目尚未同步，请返回项目管理重新进入。</p>
-                </div>
-              </div>
-              <div className="quick-links">
-                <button className="button" type="button" onClick={() => navigate('/projects')}>返回项目管理</button>
-              </div>
-            </section>
           )}
         </section>
       </main>

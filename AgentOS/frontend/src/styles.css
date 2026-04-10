@@ -1209,6 +1209,109 @@ button {
   line-height: 1.5;
 }
 
+.project-create-form {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+
+.project-create-form input,
+.project-create-form textarea {
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(83, 71, 59, 0.08);
+  color: var(--text);
+}
+
+.project-create-form textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.static-item {
+  cursor: default;
+}
+
+.workspace-banner {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.workspace-banner strong {
+  font-size: 0.92rem;
+}
+
+.workspace-banner span,
+.workspace-banner p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.workspace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-upload-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nested-surface {
+  padding: 12px;
+}
+
+.task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-card {
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(83, 71, 59, 0.08);
+}
+
+.task-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.task-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.task-card-header p {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 1320px) {
   .app-frame {
     grid-template-columns: 250px 1fr;
@@ -1225,7 +1328,8 @@ button {
   .overview-grid,
   .hero-grid,
   .graph-layout,
-  .project-workbench {
+  .project-workbench,
+  .workspace-grid {
     grid-template-columns: 1fr;
   }
 }

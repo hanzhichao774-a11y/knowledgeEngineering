@@ -1,40 +1,243 @@
 import Fastify from 'fastify';
+import multipart from '@fastify/multipart';
 import {
+  buildKnowledgeBaseSummary,
+  buildProjectFileSummaries,
   buildProjectSummary,
-  getProjectRecord,
-  listProjectRecords,
   type ChatMessage,
 } from './data/projects.js';
+import { agentOsConfig } from './config.js';
+import { bootstrapRuntime } from './services/bootstrap.js';
 import { GraphifyClient, type GraphifyFreshness } from './services/graphifyClient.js';
+import { ProjectStore } from './services/projectStore.js';
 
 const server = Fastify({
   logger: true,
 });
 
+const projectStore = new ProjectStore();
+const activeBuilds = new Map<string, Promise<void>>();
+
+await server.register(multipart, {
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+    files: 10,
+  },
+});
+
+await bootstrapRuntime(projectStore);
+
 server.get('/health', async () => ({
   status: 'ok',
+  runtimeRoot: agentOsConfig.runtimeRoot,
 }));
 
 server.get('/api/projects', async (_request, reply) => {
-  const projects = await Promise.all(
-    listProjectRecords().map(async (project) => {
-      const client = new GraphifyClient({
-        workspacePath: project.workspacePath,
-        repoPath: project.graphifyRepoPath,
-      });
-      const snapshot = await client.getSnapshotStatus();
-      return buildProjectSummary(project, snapshot);
-    }),
-  );
-
+  const projectRecords = await projectStore.listProjectRecords();
+  const projects = await Promise.all(projectRecords.map(buildProjectView));
   return reply.send({ projects });
+});
+
+server.post<{
+  Body: { name?: string; description?: string; focus?: string };
+}>('/api/projects', async (request, reply) => {
+  const name = String(request.body?.name ?? '').trim();
+  if (!name) {
+    return reply.code(400).send({
+      ok: false,
+      error: 'Project name is required',
+    });
+  }
+
+  try {
+    const project = await projectStore.createProject({
+      name,
+      description: request.body?.description,
+      focus: request.body?.focus,
+    });
+
+    if (!project) {
+      throw new Error('Project could not be created');
+    }
+
+    return reply.code(201).send({
+      ok: true,
+      project: await buildProjectView(project),
+    });
+  } catch (error) {
+    return reply.code(409).send({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Project creation failed',
+    });
+  }
+});
+
+server.get<{
+  Params: { projectId: string };
+}>('/api/projects/:projectId/files', async (request, reply) => {
+  const project = await projectStore.getProjectRecord(request.params.projectId);
+  if (!project) {
+    return reply.code(404).send({
+      ok: false,
+      error: 'Project not found',
+    });
+  }
+
+  return reply.send({
+    ok: true,
+    projectId: project.id,
+    files: buildProjectFileSummaries(project.files),
+  });
+});
+
+server.post<{
+  Params: { projectId: string };
+}>('/api/projects/:projectId/files', async (request, reply) => {
+  const project = await projectStore.getProjectRecord(request.params.projectId);
+  if (!project) {
+    return reply.code(404).send({
+      ok: false,
+      error: 'Project not found',
+    });
+  }
+
+  const uploadedFiles = [];
+  for await (const part of request.files()) {
+    const buffer = await part.toBuffer();
+    const fileRecord = await projectStore.saveUploadedFile(project.id, {
+      originalName: part.filename || 'file',
+      mimeType: part.mimetype || 'application/octet-stream',
+      buffer,
+    });
+    uploadedFiles.push(fileRecord);
+  }
+
+  if (uploadedFiles.length === 0) {
+    return reply.code(400).send({
+      ok: false,
+      error: 'At least one file is required',
+    });
+  }
+
+  const nextProject = await projectStore.getProjectRecord(project.id);
+  return reply.code(201).send({
+    ok: true,
+    projectId: project.id,
+    uploadedFiles: buildProjectFileSummaries(uploadedFiles),
+    project: nextProject ? await buildProjectView(nextProject) : null,
+  });
+});
+
+server.get<{
+  Params: { projectId: string };
+}>('/api/projects/:projectId/kb/status', async (request, reply) => {
+  const project = await projectStore.getProjectRecord(request.params.projectId);
+  if (!project) {
+    return reply.code(404).send({
+      ok: false,
+      error: 'Project not found',
+    });
+  }
+
+  const runtime = new GraphifyClient({
+    workspacePath: project.projectRoot,
+  });
+  const snapshot = await runtime.getSnapshotStatus();
+
+  return reply.send({
+    ok: true,
+    projectId: project.id,
+    knowledgeBase: buildKnowledgeBaseSummary(project, snapshot, runtime.isBuildAvailable()),
+  });
+});
+
+server.post<{
+  Params: { projectId: string };
+}>('/api/projects/:projectId/kb/build', async (request, reply) => {
+  const project = await projectStore.getProjectRecord(request.params.projectId);
+  if (!project) {
+    return reply.code(404).send({
+      ok: false,
+      error: 'Project not found',
+    });
+  }
+
+  if (activeBuilds.has(project.id)) {
+    return reply.code(409).send({
+      ok: false,
+      error: 'Knowledge base build is already running',
+    });
+  }
+
+  const runtime = new GraphifyClient({
+    workspacePath: project.projectRoot,
+  });
+  if (!runtime.isBuildAvailable()) {
+    return reply.code(503).send({
+      ok: false,
+      error: 'Graphify build adapter is not configured',
+    });
+  }
+
+  const startedAt = new Date().toISOString();
+  const task = await projectStore.appendTask(project.id, {
+    type: 'kb.build',
+    status: 'running',
+    title: '知识库构建中',
+    message: 'Runtime Gateway 已接收 build 请求，正在生成项目知识资产。',
+    createdAt: startedAt,
+    updatedAt: startedAt,
+  });
+
+  await projectStore.updateKnowledgeBaseState(project.id, {
+    status: 'building',
+    lastError: undefined,
+    dirtyReason: project.kbState.dirtyReason,
+    dirtySince: project.kbState.dirtySince,
+  });
+  await projectStore.updateProjectMeta(project.id, { updatedAt: startedAt });
+
+  const buildJob = runProjectBuild(project.id, task.id)
+    .finally(() => {
+      activeBuilds.delete(project.id);
+    });
+  activeBuilds.set(project.id, buildJob);
+
+  const refreshedProject = await projectStore.getProjectRecord(project.id);
+  const snapshot = await runtime.getSnapshotStatus();
+  return reply.code(202).send({
+    ok: true,
+    projectId: project.id,
+    task,
+    knowledgeBase: refreshedProject
+      ? buildKnowledgeBaseSummary(refreshedProject, snapshot, runtime.isBuildAvailable())
+      : null,
+  });
+});
+
+server.get<{
+  Params: { projectId: string };
+}>('/api/projects/:projectId/tasks', async (request, reply) => {
+  const project = await projectStore.getProjectRecord(request.params.projectId);
+  if (!project) {
+    return reply.code(404).send({
+      ok: false,
+      error: 'Project not found',
+    });
+  }
+
+  return reply.send({
+    ok: true,
+    projectId: project.id,
+    tasks: project.tasks,
+  });
 });
 
 server.post<{
   Params: { projectId: string };
   Body: { question?: string };
 }>('/api/projects/:projectId/chat', async (request, reply) => {
-  const project = getProjectRecord(request.params.projectId);
+  const project = await projectStore.getProjectRecord(request.params.projectId);
   if (!project) {
     return reply.code(404).send({
       ok: false,
@@ -51,8 +254,7 @@ server.post<{
   }
 
   const client = new GraphifyClient({
-    workspacePath: project.workspacePath,
-    repoPath: project.graphifyRepoPath,
+    workspacePath: project.projectRoot,
   });
 
   try {
@@ -67,7 +269,6 @@ server.post<{
     const [askResult, recordResult] = await Promise.all([
       client.ask({
         question,
-        format: 'structured',
         topN: 5,
       }),
       client.searchRecords({
@@ -86,6 +287,7 @@ server.post<{
       snapshotId: askResult.snapshotId ?? snapshot.snapshotId,
       freshness: askResult.freshness ?? snapshot.freshness,
       knowledgeBaseLabel: project.knowledgeBaseLabel,
+      knowledgeStatus: project.kbState.status,
     });
 
     const message: ChatMessage = {
@@ -147,6 +349,77 @@ function normalizeStructuredGraphifyAnswer(answer: unknown): {
   };
 }
 
+async function buildProjectView(project: NonNullable<Awaited<ReturnType<ProjectStore['getProjectRecord']>>>) {
+  const runtime = new GraphifyClient({
+    workspacePath: project.projectRoot,
+  });
+  const snapshot = await runtime.getSnapshotStatus();
+  return buildProjectSummary(project, snapshot, runtime.isBuildAvailable());
+}
+
+async function runProjectBuild(projectId: string, taskId: string) {
+  const project = await projectStore.getProjectRecord(projectId);
+  if (!project) {
+    return;
+  }
+
+  const runtime = new GraphifyClient({
+    workspacePath: project.projectRoot,
+  });
+
+  try {
+    const result = await runtime.rebuild({
+      reason: 'api-triggered-build',
+    });
+    const refreshedProject = await projectStore.getProjectRecord(projectId);
+    const snapshot = await runtime.getSnapshotStatus();
+    const completedAt = new Date().toISOString();
+
+    await projectStore.updateKnowledgeBaseState(projectId, {
+      status: snapshot.exists ? 'ready' : 'failed',
+      activeSnapshotId: snapshot.snapshotId ?? result.snapshotId,
+      lastBuildAt: completedAt,
+      dirtySince: undefined,
+      dirtyReason: undefined,
+      lastError: undefined,
+    });
+    await projectStore.updateProjectMeta(projectId, { updatedAt: completedAt });
+    await projectStore.updateTask(projectId, taskId, {
+      title: '知识库构建完成',
+      status: 'completed',
+      message: `知识库构建完成，当前 snapshot 为 ${snapshot.snapshotId ?? result.snapshotId ?? 'missing'}。`,
+      updatedAt: completedAt,
+    });
+
+    if (refreshedProject && snapshot.recordCount > 0) {
+      const answer = await runtime.searchRecords({ query: refreshedProject.name, topN: 1 });
+      const firstRecord = answer.records[0];
+      const nextLabel = String(firstRecord?.label ?? '').trim();
+      if (nextLabel) {
+        await projectStore.updateProjectMeta(projectId, {
+          knowledgeBaseLabel: nextLabel,
+          updatedAt: completedAt,
+        });
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Build failed';
+    const failedAt = new Date().toISOString();
+    await projectStore.updateKnowledgeBaseState(projectId, {
+      status: 'failed',
+      lastBuildAt: failedAt,
+      lastError: message,
+    });
+    await projectStore.updateProjectMeta(projectId, { updatedAt: failedAt });
+    await projectStore.updateTask(projectId, taskId, {
+      title: '知识库构建失败',
+      status: 'failed',
+      message: `知识库构建失败：${message}`,
+      updatedAt: failedAt,
+    });
+  }
+}
+
 function buildMarkdownAnswer(input: {
   projectName: string;
   question: string;
@@ -160,6 +433,7 @@ function buildMarkdownAnswer(input: {
   snapshotId: string | null;
   freshness: GraphifyFreshness;
   knowledgeBaseLabel: string;
+  knowledgeStatus: string;
 }) {
   const sources = uniqueStrings([
     ...input.answer.sources,
@@ -168,7 +442,7 @@ function buildMarkdownAnswer(input: {
   ]);
 
   const lines: string[] = [
-    `### 回答`,
+    '### 回答',
     '',
   ];
 
@@ -201,6 +475,8 @@ function buildMarkdownAnswer(input: {
 
   lines.push('### 知识库状态', '');
   lines.push(`- 项目：**${input.projectName}**`);
+  lines.push(`- 挂载知识库：**${input.knowledgeBaseLabel}**`);
+  lines.push(`- 知识状态：**${input.knowledgeStatus}**`);
   lines.push(`- Snapshot：\`${input.snapshotId ?? 'missing'}\``);
   lines.push(`- Freshness：**${input.freshness.status}**`);
   if (input.freshness.updatedAt) {
@@ -226,7 +502,7 @@ function buildLeadParagraph(
     return `当前问题没有命中清晰的结构化记录，但关联到了 ${labels.join('、')} 等节点，可继续围绕这些节点追问。`;
   }
 
-  return `当前知识库中没有找到与该问题直接匹配的强相关记录。建议改用更具体的时间、中心、单位或事件关键词继续提问。`;
+  return '当前知识库中没有找到与该问题直接匹配的强相关记录。建议改用更具体的时间、中心、单位或事件关键词继续提问。';
 }
 
 function summarizeRecord(record: Record<string, unknown>) {
@@ -265,96 +541,47 @@ function summarizeRecord(record: Record<string, unknown>) {
 
 function formatRecordBullet(record: Record<string, unknown>) {
   const label = String(record.label ?? '未命名记录');
-  const location = asString(record.source_location);
+  const location = String(record.source_location ?? '').trim();
   const payload = isObject(record.record_json) ? record.record_json : null;
-  const summary = payload ? summarizePayload(payload) : '';
-  const parts = [`**${label}**`];
-  if (location) {
-    parts.push(`（${location}）`);
-  }
-  if (summary) {
-    parts.push(`：${summary}`);
-  }
-  return parts.join('');
+  const payloadParts = payload ? summarizeRecordPayload(payload) : '';
+  const suffix = [location && `位置：${location}`, payloadParts].filter(Boolean).join('；');
+  return suffix ? `**${label}**，${suffix}` : `**${label}**`;
 }
 
-function summarizePayload(payload: Record<string, unknown>) {
+function summarizeRecordPayload(payload: Record<string, unknown>) {
   const centers = asStringArray(payload.centers);
   if (centers.length > 0) {
-    const reasons = asStringArray(payload.main_reasons);
-    const measures = asStringArray(payload.measures);
-    const fragments = [`中心 ${centers.join('、')}`];
-    if (reasons.length > 0) {
-      fragments.push(`原因 ${reasons.slice(0, 3).join('、')}`);
-    }
-    if (measures.length > 0) {
-      fragments.push(`措施 ${measures.slice(0, 3).join('、')}`);
-    }
-    return fragments.join('；');
+    return `中心：${centers.join('、')}`;
   }
 
   const managementUnit = asString(payload.management_unit);
   if (managementUnit) {
-    return [
-      `管理单位 ${managementUnit}`,
-      `12345 ${asNumberLike(payload.source_12345_complaints) ?? '--'} 件`,
-      `96069 ${asNumberLike(payload.source_96069_network_complaints) ?? '--'} 件`,
-      `小循环 ${asNumberLike(payload.source_small_cycle_complaints) ?? '--'} 件`,
-      `微循环 ${asNumberLike(payload.source_micro_cycle_complaints) ?? '--'} 件`,
-    ].join('；');
+    return `单位：${managementUnit}`;
   }
 
-  const incidents = asStringArray(payload.heat_source_incidents);
-  if (incidents.length > 0) {
-    return `突发情况 ${incidents.slice(0, 3).join('、')}`;
+  const period = asString(payload.period);
+  if (period) {
+    return `时间：${period}`;
   }
 
-  const entries = Object.entries(payload)
-    .filter(([, value]) => value !== null && value !== undefined && value !== '')
-    .slice(0, 4)
-    .map(([key, value]) => `${humanizeKey(key)} ${formatUnknown(value)}`);
-  return entries.join('；');
+  return '';
 }
 
 function formatNodeBullet(node: Record<string, unknown>) {
-  const label = String(node.label ?? '未命名节点');
-  const location = asString(node.source_location);
-  const degree = asNumberLike(node.degree);
-  const segments = [`**${label}**`];
-  if (location) {
-    segments.push(`（${location}）`);
-  }
-  if (degree !== null) {
-    segments.push(`，关联度 ${degree}`);
-  }
-  return segments.join('');
-}
-
-function asString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function asNumberLike(value: unknown) {
-  if (typeof value === 'number') return String(value);
-  if (typeof value === 'string' && value.trim()) return value;
-  return null;
-}
-
-function asStringArray(value: unknown) {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.filter(Boolean)));
+  const label = String(node.label ?? node.id ?? '未命名节点');
+  const source = String(node.source_file ?? '').trim();
+  const location = String(node.source_location ?? '').trim();
+  const details = [source && shortSourceName(source), location].filter(Boolean).join(' · ');
+  return details ? `**${label}** (${details})` : `**${label}**`;
 }
 
 function shortSourceName(source: string) {
-  const segments = source.split('/');
+  const segments = source.split(/[\\/]/).filter(Boolean);
   return segments.at(-1) ?? source;
+}
+
+function uniqueStrings(items: string[]) {
+  return [...new Set(items.filter(Boolean))];
 }
 
 function formatTime(value: string) {
@@ -371,35 +598,29 @@ function formatTime(value: string) {
   }).format(date);
 }
 
-function humanizeKey(key: string) {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (segment) => segment.toUpperCase());
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function formatUnknown(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map((item) => formatUnknown(item)).join('、');
-  }
-  if (isObject(value)) {
-    return Object.entries(value)
-      .slice(0, 3)
-      .map(([key, innerValue]) => `${humanizeKey(key)} ${formatUnknown(innerValue)}`)
-      .join('；');
-  }
-  return String(value);
+function asString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-const host = process.env.HOST ?? '0.0.0.0';
-const port = Number(process.env.PORT ?? 3011);
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.map((item) => asString(item)).filter((item): item is string => Boolean(item))
+    : [];
+}
 
-const start = async () => {
-  try {
-    await server.listen({ host, port });
-  } catch (error) {
-    server.log.error(error);
-    process.exit(1);
-  }
-};
+function asNumberLike(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return undefined;
+}
 
-void start();
+const address = await server.listen({
+  host: '0.0.0.0',
+  port: agentOsConfig.port,
+});
+
+server.log.info(`AgentOS backend listening on ${address}`);

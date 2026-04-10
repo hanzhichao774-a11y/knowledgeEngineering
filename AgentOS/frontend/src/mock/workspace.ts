@@ -32,6 +32,7 @@ export interface ChatMessage {
 export interface KnowledgeBaseSummary {
   label: string;
   workspacePath: string;
+  status: 'empty' | 'dirty' | 'building' | 'ready' | 'failed';
   snapshotId: string | null;
   freshness: {
     status: 'fresh' | 'stale' | 'missing';
@@ -41,6 +42,32 @@ export interface KnowledgeBaseSummary {
   nodeCount: number;
   recordCount: number;
   assetRoot?: string;
+  buildAvailable: boolean;
+  dirtySince?: string;
+  dirtyReason?: string;
+  lastBuildAt?: string;
+  lastError?: string;
+}
+
+export interface ProjectFileSummary {
+  id: string;
+  name: string;
+  mimeType: string;
+  extension: string;
+  uploadedAt: string;
+  sizeBytes: number;
+  sizeLabel: string;
+}
+
+export interface ProjectTaskRecord {
+  id: string;
+  type: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  title: string;
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ParticipantAgent {
@@ -75,6 +102,10 @@ export interface ProjectSummary {
   suggestedQuestions: string[];
   knowledgeBase: KnowledgeBaseSummary;
   participantAgents: ParticipantAgent[];
+  fileCount: number;
+  taskCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const documentExtensions = new Set(['pdf', 'doc', 'docx', 'md', 'txt']);
@@ -87,7 +118,7 @@ function formatCount(value: number) {
 
 export function buildOverviewMetrics(projects: ProjectSummary[]): Metric[] {
   const totalProjects = projects.length;
-  const pendingProjects = projects.filter((project) => ['待解析', '构建中'].includes(project.status)).length;
+  const pendingProjects = projects.filter((project) => ['待解析', '构建中', '待刷新', '待构建'].includes(project.status)).length;
   const readyProjects = projects.filter((project) => project.status === '可问答').length;
 
   return [
@@ -111,15 +142,18 @@ export function buildIssueDistribution(projects: ProjectSummary[]) {
   let otherCount = 0;
 
   for (const project of projects) {
+    if (project.fileCount === 0) {
+      continue;
+    }
     const extension = project.fileType.toLowerCase();
     if (documentExtensions.has(extension)) {
-      documentCount += 1;
+      documentCount += project.fileCount;
     } else if (sheetExtensions.has(extension)) {
-      sheetCount += 1;
+      sheetCount += project.fileCount;
     } else if (slideExtensions.has(extension)) {
-      slideCount += 1;
+      slideCount += project.fileCount;
     } else {
-      otherCount += 1;
+      otherCount += project.fileCount;
     }
   }
 
