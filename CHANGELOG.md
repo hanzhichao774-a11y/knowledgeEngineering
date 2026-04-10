@@ -8,6 +8,47 @@
 
 ---
 
+## [0.8.0] - 2026-04-10
+
+KodaX 编排报告导出 + Agent 树形对话 UI 重构 + 消息过滤优化 + UI 全面升级。
+
+### Added
+
+- **KodaX 报告导出**：通过 KodaX 编排 `.kodax/skills/` 下的 `docx/SKILL.md`、`xlsx/SKILL.md`、`pdf/SKILL.md`，LLM 动态生成并执行脚本，导出 Word / Excel / PDF 三种格式报告
+- **报告导出 API**：`POST /api/report/export` 端点，接收报告数据和格式参数，返回生成的文件流
+- **KodaXOrchestrator 服务**：统一封装 KodaX 调用，支持知识入库（`runIngest`）、知识检索（`runQuery`）、报告导出（`runExport`）三种编排模式
+- **Agent 树形对话 UI**：新增 `AgentNode` 组件，管理智能体与工作智能体消息按 `parentId` 层级渲染，带连线和缩进的树形结构
+- **脉冲动画指示器**：活跃的 Agent 节点末尾显示脉冲动画（"处理中..."），任务完成后自动消失
+- **消息人性化翻译**：后端将 bash 命令（`pip install`、`python`、`npm`、`cat`、`neo4j` 等）自动翻译为中文进度提示（如"正在安装依赖包..."、"正在执行数据处理脚本..."）
+- **消息去重与静默**：抑制管理性命令（`cd`、`echo`、`mkdir`、`ls`）的 UI 展示；相邻重复消息自动合并；错误堆栈仅输出摘要而非全文
+- **ReportCard 组件**：卡片式报告展示，支持三种格式下载按钮和加载动画
+- **TaskHeader 组件**：任务状态卡片，显示进度、Token 消耗、成本估算
+- **粒子背景动画**：`ParticleBackground` 组件，60 个粒子 Canvas 动画，流动波形效果
+- **技能面板**：`SkillTab` 组件展示已注册技能列表
+- **告警面板**：`AlertPanel` 组件展示系统告警信息
+- **Agent 流程图**：`AgentFlow` 组件可视化 Agent 调度流程
+- **.kodax/skills/ 目录**：从 `gateway/skills/` 导入 docx / xlsx / pdf / graphify 四组技能，供 KodaX 发现和加载
+- **PDF 导出流程文档**：`docs/pdf-export-flow.md` 详解 KodaX 编排 PDF 生成的完整链路
+
+### Changed
+
+- **KEWorker / QueryWorker 重构**：从直接调用 Skill 改为通过 `KodaXOrchestrator` 编排，统一消息回调和 Token 统计
+- **TaskService 消息层级化**：`ChatMessage` 新增 `parentId` 字段，manager 消息作为根节点、worker 消息挂载为子节点
+- **ChatArea 树形渲染**：`buildMessageTree()` 将扁平消息数组转为树结构，`AgentNode` 渲染 agent 消息、`MessageBubble` 渲染 user/assistant/system 消息
+- **MessageBubble 精简**：移除 agent 消息渲染逻辑，专注处理 user / assistant / system 三种角色
+- **UI 主题升级**：磨砂玻璃卡片风格、青色调色板、CSS Variables 重构、布局响应式优化
+- **Header / Footer 视觉更新**：适配新主题样式
+- **graphifyNormalize 增量检测优化**：增强 CJK 空格清理逻辑，支持增量和全量两种检测路径
+
+### Fixed
+
+- **对话框暴露原始命令**：任务执行时聊天界面显示 `cd /Users/...`、`pip install ...` 等原始 bash 命令，实施人员无法理解 → 替换为人性化中文进度提示
+- **重复消息刷屏**：连续发送"正在执行系统操作..."等相同内容 → 防抖去重，300ms 内相同消息合并
+- **错误堆栈直接展示**：Python Traceback 和 ERROR 日志直接显示在对话中 → 后端静默处理，仅在控制台输出完整错误
+- **ReportCard 下载无反馈**：点击下载按钮无加载状态 → 增加 Spinner 动画和按钮禁用状态
+
+---
+
 ## [0.7.0] - 2026-04-09
 
 整体架构切换至 graphify-v3 知识工程管线，集成 MinerU 混合 PDF 解析，实现完整 LLM Wiki 闭环。
