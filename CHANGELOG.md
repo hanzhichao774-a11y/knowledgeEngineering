@@ -8,6 +8,29 @@
 
 ---
 
+## [0.9.0] - 2026-04-11
+
+三处 UI 优化 + 结果交互重构 + 技能面板改造。
+
+### Added
+
+- **已生成结果列表**：ResultTab 顶部新增已完成任务列表，从 taskStore 筛选 completed/failed 任务，点击任意条目即刷新下方结果卡片（回答结果 / 知识摘要 / 本体 / Schema）
+- **任务结果前端缓存**：resultStore 新增 `taskResults` 缓存（Record），task.complete 时自动存入 localStorage，点击列表优先读缓存，解决后端重启后结果丢失的问题
+- **系统技能浮窗**：Header 左侧新增「系统技能」按钮（Zap 图标），点击弹出绝对定位浮窗面板渲染 SkillTab，点击外部自动关闭
+- **DashboardView 组件**：中间面板空闲状态展示 Agent 卡片、技能目录、知识库摘要
+
+### Changed
+
+- **知识摘要替代文件计数**：后端 TaskService 的 summary 字段改为读取 GRAPH_REPORT.md 前 800 字作为知识摘要，读取失败回退到节点/边统计
+- **ResultTab 渲染统一**：移除 local state `loaded` 双轨渲染，改为点击任务时写入 resultStore 全局字段（answerContent / documentSummary / ontologyResult / schemaContent），由已有卡片自动刷新
+- **知识摘要 Markdown 渲染**：documentSummary 卡片改用 ReactMarkdown 渲染，支持 GRAPH_REPORT.md 格式内容
+- **技能 tab 移出右侧面板**：RightTab 类型移除 `skill`，右侧面板只保留「产出结果 / 智能体 / 图谱」三个 tab
+- **技能面板背景不透明**：skillPanel 背景从 `rgba(8,28,34,0.55)` 改为 `rgba(10,14,23,0.96)`，避免穿透
+- **中间面板双态布局**：空闲显示 DashboardView，有任务时切换为 ChatArea，AppShell 动态调整三栏比例
+- **消息摘要路由**：长消息在 MessageBubble 中截断显示，提供「查看完整结果」按钮跳转至 ResultTab
+
+---
+
 ## [0.8.0] - 2026-04-10
 
 KodaX 编排报告导出 + Agent 树形对话 UI 重构 + 消息过滤优化 + UI 全面升级。

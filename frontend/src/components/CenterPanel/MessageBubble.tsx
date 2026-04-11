@@ -1,10 +1,21 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../types';
-import { ReportCard } from './ReportCard';
+import { useResultStore } from '../../store/resultStore';
 import styles from './CenterPanel.module.css';
 
+const SUMMARY_THRESHOLD = 300;
+const SUMMARY_SLICE = 150;
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
 export function MessageBubble({ msg }: { msg: ChatMessage }) {
+  const setActiveTab = useResultStore((s) => s.setActiveTab);
+  const setAnswerContent = useResultStore((s) => s.setAnswerContent);
+  const setAnswerReport = useResultStore((s) => s.setAnswerReport);
+
   if (msg.role === 'user') {
     return (
       <div className={styles.userRow}>
@@ -32,6 +43,16 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
   }
 
   if (msg.role === 'assistant') {
+    const plainText = stripHtml(msg.content);
+    const isLong = plainText.length > SUMMARY_THRESHOLD || !!msg.report;
+    const summaryText = isLong ? plainText.slice(0, SUMMARY_SLICE) + '...' : null;
+
+    const handleViewFull = () => {
+      setAnswerContent(msg.content);
+      setAnswerReport(msg.report ?? null);
+      setActiveTab('result');
+    };
+
     return (
       <div className={styles.assistantRow}>
         <div className={styles.assistantMeta}>
@@ -39,9 +60,17 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
           <span className={styles.assistantName}>{msg.name || '知识助手'}</span>
         </div>
         <div className={`${styles.assistantBubble} ${styles.markdownContent}`}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          {isLong ? (
+            <>
+              <p className={styles.summarySnippet}>{summaryText}</p>
+              <button className={styles.viewFullBtn} onClick={handleViewFull}>
+                查看完整结果 →
+              </button>
+            </>
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+          )}
         </div>
-        {msg.report && <ReportCard report={msg.report} />}
       </div>
     );
   }

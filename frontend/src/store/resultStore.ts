@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { OntologyResult, GraphData, AgentDetail, RightTab } from '../types';
+import type { OntologyResult, GraphData, AgentDetail, RightTab, ReportData } from '../types';
+
+export interface CachedTaskResult {
+  ontology?: OntologyResult;
+  schema?: string;
+  summary?: string;
+  answer?: string;
+}
 
 interface ResultState {
   activeTab: RightTab;
@@ -11,6 +18,9 @@ interface ResultState {
   documentSummary: string | null;
   graphData: GraphData | null;
   agentDetail: AgentDetail | null;
+  answerContent: string | null;
+  answerReport: ReportData | null;
+  taskResults: Record<string, CachedTaskResult>;
 
   setActiveTab: (tab: RightTab) => void;
   setOntologyResult: (result: OntologyResult) => void;
@@ -20,6 +30,9 @@ interface ResultState {
   setDocumentSummary: (summary: string) => void;
   setGraphData: (data: GraphData) => void;
   setAgentDetail: (detail: AgentDetail) => void;
+  setAnswerContent: (content: string | null) => void;
+  setAnswerReport: (report: ReportData | null) => void;
+  cacheTaskResult: (taskId: string, result: CachedTaskResult) => void;
   clearAll: () => void;
 }
 
@@ -34,6 +47,9 @@ export const useResultStore = create<ResultState>()(
       documentSummary: null,
       graphData: null,
       agentDetail: null,
+      answerContent: null,
+      answerReport: null,
+      taskResults: {},
 
       setActiveTab: (tab) => set({ activeTab: tab }),
       setOntologyResult: (result) => set({ ontologyResult: result }),
@@ -43,6 +59,12 @@ export const useResultStore = create<ResultState>()(
       setDocumentSummary: (summary) => set({ documentSummary: summary }),
       setGraphData: (data) => set({ graphData: data }),
       setAgentDetail: (detail) => set({ agentDetail: detail }),
+      setAnswerContent: (content) => set({ answerContent: content }),
+      setAnswerReport: (report) => set({ answerReport: report }),
+      cacheTaskResult: (taskId, result) =>
+        set((state) => ({
+          taskResults: { ...state.taskResults, [taskId]: result },
+        })),
       clearAll: () =>
         set({
           activeTab: 'result',
@@ -53,6 +75,9 @@ export const useResultStore = create<ResultState>()(
           documentSummary: null,
           graphData: null,
           agentDetail: null,
+          answerContent: null,
+          answerReport: null,
+          taskResults: {},
         }),
     }),
     {
@@ -66,6 +91,9 @@ export const useResultStore = create<ResultState>()(
         documentSummary: state.documentSummary,
         graphData: state.graphData,
         agentDetail: state.agentDetail,
+        answerContent: state.answerContent,
+        answerReport: state.answerReport,
+        taskResults: state.taskResults,
       }),
     },
   ),

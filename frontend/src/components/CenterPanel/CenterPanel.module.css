@@ -785,3 +785,27 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* Summary snippet for long assistant messages */
+.summarySnippet {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.viewFullBtn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--accent-light);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.viewFullBtn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}

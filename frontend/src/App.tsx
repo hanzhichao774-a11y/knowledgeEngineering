@@ -135,6 +135,13 @@ function handleWSEvent(event: Record<string, unknown>) {
             resultStore.setSchemaProgress(100);
           }
           if (result.summary) resultStore.setDocumentSummary(result.summary);
+
+          resultStore.cacheTaskResult(taskId, {
+            ontology: result.ontology?.entityCount ? result.ontology : undefined,
+            schema: result.schema || undefined,
+            summary: result.summary || undefined,
+            answer: result.answer || undefined,
+          });
         }
       });
 

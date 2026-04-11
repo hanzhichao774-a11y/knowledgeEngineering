@@ -16,6 +16,11 @@
   overflow: hidden;
   position: relative;
   z-index: 1;
+  transition: grid-template-columns 0.4s ease;
+}
+
+.mainTaskActive {
+  grid-template-columns: 240px minmax(280px, 0.6fr) minmax(360px, 1fr);
 }
 
 .leftPanel,

@@ -158,7 +158,7 @@ export interface AgentDetail {
   skills: SkillInfo[];
 }
 
-export type RightTab = 'result' | 'agent' | 'skill' | 'graph';
+export type RightTab = 'result' | 'agent' | 'graph';
 
 export type AlertSeverity = 'high' | 'medium' | 'low';
 export type AlertCategory = 'anomaly' | 'threshold' | 'missing';

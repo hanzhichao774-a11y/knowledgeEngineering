@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
+import { readFileSync } from 'node:fs';
 import { broadcast } from '../websocket/handler.js';
 import { ManagerAgent } from '../agents/ManagerAgent.js';
 import { storeGraphData } from './GraphService.js';
 import { getFilePath } from '../routes/upload.js';
+import { getWorkspaceManager } from './WorkspaceManager.js';
 import type { AgentMessage, SkillResult, ExecutionContext, TaskIntent } from '../agents/types.js';
 import { GatewayClient, type GatewayClientLike } from '../clients/GatewayClient.js';
 import { GraphifyClient, type GraphifyClientLike } from '../clients/GraphifyClient.js';
@@ -372,7 +374,7 @@ export class TaskService {
         attrCount: 0,
       },
       schema: '',
-      summary: normalizeData ? `已处理 ${(normalizeData.newFileCount as number) ?? 0} 个文件（${normalizeData.isIncremental ? '增量' : '全量'}模式）` : '',
+      summary: buildKnowledgeSummary(normalizeData, graphNodeCount, graphEdgeCount),
       graphNodeCount,
       graphEdgeCount,
     };
@@ -440,6 +442,23 @@ function buildSummaryWithValidation(docData: Record<string, unknown> | undefined
   }
 
   return summary + validationNote;
+}
+
+function buildKnowledgeSummary(
+  normalizeData: Record<string, unknown> | undefined,
+  graphNodeCount: number,
+  graphEdgeCount: number,
+): string {
+  try {
+    const ws = getWorkspaceManager();
+    const report = readFileSync(ws.graphReportPath, 'utf-8');
+    if (report.trim().length > 0) return report.slice(0, 800);
+  } catch { /* fallback */ }
+
+  if (!normalizeData) return '';
+  const fileCount = (normalizeData.newFileCount as number) ?? 0;
+  const mode = normalizeData.isIncremental ? '增量' : '全量';
+  return `已处理 ${fileCount} 个文件（${mode}模式），构建知识图谱：${graphNodeCount} 个节点、${graphEdgeCount} 条关系`;
 }
 
 function formatElapsed(ms: number): string {

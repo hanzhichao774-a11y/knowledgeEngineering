@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import { TaskHeader } from './TaskHeader';
 import { ChatArea } from './ChatArea';
+import { DashboardView } from './DashboardView';
 import { InputArea } from './InputArea';
 import { useChatStore } from '../../store/chatStore';
+import { useTaskStore } from '../../store/taskStore';
 import { createTask, uploadFile } from '../../services/api';
 import { MOCK_REPORT, REPORT_STEPS } from '../../constants/reportMockData';
 import type { ChatMessage, FileAttachment } from '../../types';
@@ -19,7 +21,11 @@ function isReportCommand(text: string): boolean {
 
 export function CenterPanel({ isMock }: CenterPanelProps) {
   const addMessage = useChatStore((s) => s.addMessage);
+  const messages = useChatStore((s) => s.messages);
+  const activeTask = useTaskStore((s) => s.tasks.find((t) => t.status === 'running'));
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const isIdle = messages.length === 0 && !activeTask;
 
   const runReportFlow = useCallback(async () => {
     setIsProcessing(true);
@@ -142,7 +148,7 @@ export function CenterPanel({ isMock }: CenterPanelProps) {
   return (
     <>
       <TaskHeader />
-      <ChatArea />
+      {isIdle ? <DashboardView /> : <ChatArea />}
       <InputArea
         onSend={handleSend}
         onFileUpload={handleFileUpload}

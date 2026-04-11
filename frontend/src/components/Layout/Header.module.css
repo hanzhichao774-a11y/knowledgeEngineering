@@ -91,3 +91,66 @@
   border-color: var(--red);
   background: var(--red-bg);
 }
+
+/* Skill Button */
+.skillBtnWrap {
+  position: relative;
+  margin-left: 8px;
+}
+
+.skillBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 3px 10px;
+  background: rgba(21, 24, 34, 0.5);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--font-display);
+  letter-spacing: 0.2px;
+}
+
+.skillBtn:hover {
+  color: var(--accent-light);
+  border-color: var(--accent);
+  background: rgba(14, 165, 149, 0.08);
+}
+
+.skillBtnActive {
+  color: var(--accent-light);
+  border-color: var(--accent);
+  background: rgba(14, 165, 149, 0.12);
+}
+
+.skillPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 380px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: rgba(10, 14, 23, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 24px rgba(14, 165, 149, 0.08);
+  z-index: 100;
+  padding: 12px;
+  animation: skillPanelIn 0.2s ease;
+}
+
+@keyframes skillPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
