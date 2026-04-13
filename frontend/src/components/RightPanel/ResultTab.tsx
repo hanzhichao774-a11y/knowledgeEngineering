@@ -40,7 +40,6 @@ export function ResultTab() {
   const {
     answerContent, answerReport,
     ontologyResult, schemaContent, schemaStatus, schemaProgress,
-    documentSummary,
   } = useResultStore();
   const cacheTaskResult = useResultStore((s) => s.cacheTaskResult);
 
@@ -87,7 +86,7 @@ export function ResultTab() {
   const entities = ontologyResult?.entities ?? [];
   const relations = ontologyResult?.relations ?? [];
   const hasOntology = classes.length > 0 || entities.length > 0 || relations.length > 0;
-  const hasAny = finishedTasks.length > 0 || answerContent || answerReport || hasOntology || schemaContent || documentSummary;
+  const hasAny = finishedTasks.length > 0 || answerContent || answerReport || hasOntology || schemaContent;
 
   return (
     <div>
@@ -146,19 +145,6 @@ export function ResultTab() {
           </div>
           <div className={styles.resultCardBody}>
             <ReportCard report={answerReport} />
-          </div>
-        </div>
-      )}
-
-      {documentSummary && (
-        <div className={styles.resultCard}>
-          <div className={styles.resultCardHeader}>
-            <span className={styles.resultIcon}>📚</span>
-            <span className={styles.resultTitle}>知识摘要</span>
-            <span className={`${styles.resultBadge} ${styles.badgeSuccess}`}>已完成</span>
-          </div>
-          <div className={`${styles.resultCardBody} ${styles.markdownBody}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{documentSummary}</ReactMarkdown>
           </div>
         </div>
       )}

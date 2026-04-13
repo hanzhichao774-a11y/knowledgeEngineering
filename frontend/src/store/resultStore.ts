@@ -39,7 +39,7 @@ interface ResultState {
 export const useResultStore = create<ResultState>()(
   persist(
     (set) => ({
-      activeTab: 'result',
+      activeTab: 'agent',
       ontologyResult: null,
       schemaContent: null,
       schemaStatus: 'pending',
@@ -67,7 +67,7 @@ export const useResultStore = create<ResultState>()(
         })),
       clearAll: () =>
         set({
-          activeTab: 'result',
+          activeTab: 'agent',
           ontologyResult: null,
           schemaContent: null,
           schemaStatus: 'pending',

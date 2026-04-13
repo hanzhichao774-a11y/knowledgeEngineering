@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import { broadcast } from '../websocket/handler.js';
 import { ManagerAgent } from '../agents/ManagerAgent.js';
 import { storeGraphData } from './GraphService.js';
@@ -311,6 +312,7 @@ export class TaskService {
     };
 
     if (hasError) {
+      const totalCost = accumulateAndGetTotalCost(task);
       broadcast({
         type: 'agent.message',
         message: {
@@ -319,7 +321,8 @@ export class TaskService {
           name: '管理智能体',
           content: `<p>❌ <strong>知识检索失败</strong></p>
 <p>失败步骤：${failedSteps.join('、')}</p>
-<p>💰 已消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token</p>`,
+<p>💰 本次消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token</p>
+<p>💰 总消耗：输入 ${totalCost.inputTokens} Token · 输出 ${totalCost.outputTokens} Token</p>`,
           timestamp: new Date().toTimeString().slice(0, 5),
         },
       });
@@ -359,25 +362,30 @@ export class TaskService {
     const exportData = exportResult?.status === 'success' ? exportResult.data as Record<string, unknown> : undefined;
 
     const neo4jResult = exportData?.neo4j as Record<string, unknown> | undefined;
-    const graphNodeCount = (neo4jResult?.nodes as number) ?? 0;
-    const graphEdgeCount = (neo4jResult?.edges as number) ?? 0;
+    let graphNodeCount = (neo4jResult?.nodes as number) ?? 0;
+    let graphEdgeCount = (neo4jResult?.edges as number) ?? 0;
+
+    if (graphNodeCount === 0 && graphEdgeCount === 0) {
+      try {
+        const ws = getWorkspaceManager();
+        const indexPath = path.join(ws.outDir, 'graph', 'index.json');
+        const idx = JSON.parse(readFileSync(indexPath, 'utf-8'));
+        graphNodeCount = idx.nodes ?? 0;
+        graphEdgeCount = idx.edges ?? 0;
+      } catch { /* fallback to 0 */ }
+    }
+
+    const { ontology, schema } = extractOntologyFromGraph();
 
     task.result = {
-      ontology: {
-        classes: [],
-        entities: [],
-        relations: [],
-        attributes: [],
-        classCount: 0,
-        entityCount: 0,
-        relationCount: 0,
-        attrCount: 0,
-      },
-      schema: '',
+      ontology,
+      schema,
       summary: buildKnowledgeSummary(normalizeData, graphNodeCount, graphEdgeCount),
       graphNodeCount,
       graphEdgeCount,
     };
+
+    const totalCost = accumulateAndGetTotalCost(task);
 
     if (hasError) {
       broadcast({
@@ -389,7 +397,8 @@ export class TaskService {
           content: `<p>❌ <strong>知识工程任务失败</strong></p>
 <p>失败步骤：${failedSteps.join('、')}</p>
 <p>已完成：${completedSteps.length} / ${task.steps.length} 步</p>
-<p>💰 已消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
+<p>💰 本次消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>
+<p>💰 总消耗：输入 ${totalCost.inputTokens} Token · 输出 ${totalCost.outputTokens} Token · 预估费用 ¥${totalCost.estimatedCost}</p>`,
           timestamp: new Date().toTimeString().slice(0, 5),
         },
       });
@@ -406,8 +415,9 @@ export class TaskService {
         content: `<p>✅ <strong>知识工程任务已完成（${modeLabel}）</strong></p>
 <p>知识工程数字员工 #KE-01 已完成全部 ${task.steps.length} 个步骤：</p>
 <p>• 文档规范化 → 知识提取 → 图谱构建 → 知识导出 → 资产构建</p>
-<p>📊 Neo4j：${graphNodeCount} 个节点、${graphEdgeCount} 条关系</p>
-<p>💰 总消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>`,
+<p>📊 知识图谱：${graphNodeCount} 个节点、${graphEdgeCount} 条关系</p>
+<p>💰 本次消耗：输入 ${task.cost.inputTokens} Token · 输出 ${task.cost.outputTokens} Token · 预估费用 ¥${task.cost.estimatedCost}</p>
+<p>💰 总消耗：输入 ${totalCost.inputTokens} Token · 输出 ${totalCost.outputTokens} Token · 预估费用 ¥${totalCost.estimatedCost}</p>`,
         timestamp: new Date().toTimeString().slice(0, 5),
       },
     });
@@ -459,6 +469,126 @@ function buildKnowledgeSummary(
   const fileCount = (normalizeData.newFileCount as number) ?? 0;
   const mode = normalizeData.isIncremental ? '增量' : '全量';
   return `已处理 ${fileCount} 个文件（${mode}模式），构建知识图谱：${graphNodeCount} 个节点、${graphEdgeCount} 条关系`;
+}
+
+function extractOntologyFromGraph(): { ontology: NonNullable<Task['result']>['ontology']; schema: string } {
+  const empty = {
+    ontology: { classes: [] as { name: string; desc: string }[], entities: [] as { name: string; class: string; desc: string }[], relations: [] as { name: string; source: string; target: string; desc: string }[], attributes: [], classCount: 0, entityCount: 0, relationCount: 0, attrCount: 0 },
+    schema: '',
+  };
+  try {
+    const ws = getWorkspaceManager();
+    const raw = readFileSync(ws.graphJsonPath, 'utf-8');
+    const graph = JSON.parse(raw) as {
+      nodes: Array<{ id: string; label: string; file_type: string; source_file?: string; community?: number }>;
+      links: Array<{ relation: string; source: string; target: string; source_file?: string; weight?: number }>;
+    };
+
+    const NOISE_PREFIXES = ['Normalized PDF', 'Raw Extracted Text', 'Numbered Summary Items', 'Extracted Page Images', 'Value:'];
+    const isDocNode = (n: { source_file?: string; label: string }) => {
+      const sf = n.source_file ?? '';
+      if (!sf.includes('converted/') || !sf.endsWith('.md') || sf.includes('memory/')) return false;
+      if (NOISE_PREFIXES.some((p) => n.label.startsWith(p))) return false;
+      return true;
+    };
+
+    const docNodes = graph.nodes.filter(isDocNode);
+    const docNodeIds = new Set(docNodes.map((n) => n.id));
+    const docLinks = graph.links.filter((l) => docNodeIds.has(l.source) && docNodeIds.has(l.target));
+
+    const communityMap = new Map<number, { labels: string[]; ids: string[] }>();
+    for (const n of docNodes) {
+      const c = n.community ?? -1;
+      if (!communityMap.has(c)) communityMap.set(c, { labels: [], ids: [] });
+      const bucket = communityMap.get(c)!;
+      bucket.labels.push(n.label || n.id);
+      bucket.ids.push(n.id);
+    }
+
+    const classes: { name: string; desc: string }[] = [];
+    const nodeClassMap = new Map<string, string>();
+    for (const [c, bucket] of communityMap) {
+      if (c === -1) continue;
+      const className = bucket.labels[0];
+      classes.push({ name: className, desc: `${bucket.labels.length} 个实体` });
+      for (const id of bucket.ids) nodeClassMap.set(id, className);
+    }
+    classes.sort((a, b) => parseInt(b.desc) - parseInt(a.desc));
+
+    const entities = docNodes.map((n) => ({
+      name: n.label || n.id,
+      class: nodeClassMap.get(n.id) ?? '其他',
+      desc: `community ${n.community ?? '-'}`,
+    }));
+
+    const relSet = new Map<string, { source: string; target: string; count: number }>();
+    for (const l of docLinks) {
+      const key = l.relation || 'related';
+      if (!relSet.has(key)) {
+        relSet.set(key, { source: l.source, target: l.target, count: 1 });
+      } else {
+        relSet.get(key)!.count++;
+      }
+    }
+    const relations = Array.from(relSet.entries()).map(([name, info]) => ({
+      name,
+      source: info.source,
+      target: info.target,
+      desc: `共 ${info.count} 条`,
+    }));
+
+    const schemaLines = [
+      `本体类：${classes.map((c) => `${c.name}(${c.desc})`).join('、')}`,
+      `关系类型：${relations.map((r) => `${r.name}(${r.desc})`).join('、')}`,
+      `社区数：${communityMap.size}`,
+    ];
+
+    return {
+      ontology: {
+        classes,
+        entities: entities.slice(0, 50),
+        relations,
+        attributes: [],
+        classCount: classes.length,
+        entityCount: entities.length,
+        relationCount: relations.length,
+        attrCount: 0,
+      },
+      schema: schemaLines.join('\n'),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function getTotalCostPath(): string {
+  return path.join(getWorkspaceManager().outDir, 'total_cost.json');
+}
+
+function loadTotalCost(): { inputTokens: number; outputTokens: number; estimatedCost: number } {
+  try {
+    const p = getTotalCostPath();
+    if (existsSync(p)) {
+      const data = JSON.parse(readFileSync(p, 'utf-8'));
+      return {
+        inputTokens: data.inputTokens ?? 0,
+        outputTokens: data.outputTokens ?? 0,
+        estimatedCost: data.estimatedCost ?? 0,
+      };
+    }
+  } catch { /* fallback */ }
+  return { inputTokens: 0, outputTokens: 0, estimatedCost: 0 };
+}
+
+function accumulateAndGetTotalCost(task: Task) {
+  const total = loadTotalCost();
+  total.inputTokens += task.cost.inputTokens;
+  total.outputTokens += task.cost.outputTokens;
+  total.estimatedCost += task.cost.estimatedCost;
+  try {
+    writeFileSync(getTotalCostPath(), JSON.stringify(total, null, 2), 'utf-8');
+  } catch { /* ignore write errors */ }
+  return { inputTokens: total.inputTokens, outputTokens: total.outputTokens, estimatedCost: total.estimatedCost.toFixed(2) };
 }
 
 function formatElapsed(ms: number): string {

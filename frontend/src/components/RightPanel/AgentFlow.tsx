@@ -3,16 +3,19 @@ import { AGENT_REGISTRY } from '../../constants/agentRegistry';
 import type { AgentInfo } from '../../constants/agentRegistry';
 import styles from './AgentFlow.module.css';
 
-function AgentNode({ agent, isExpanded, onToggle }: {
+function AgentNode({ agent, isExpanded, onToggle, className, style }: {
   agent: AgentInfo;
   isExpanded: boolean;
   onToggle: () => void;
+  className?: string;
+  style?: React.CSSProperties;
 }) {
   const isManager = agent.role === 'manager';
 
   return (
     <div
-      className={`${styles.node} ${isManager ? styles.nodeManager : styles.nodeWorker}`}
+      className={`${styles.node} ${isManager ? styles.nodeManager : styles.nodeWorker} ${className ?? ''}`}
+      style={style}
       onClick={onToggle}
     >
       <div className={styles.nodeHeader}>
@@ -57,9 +60,9 @@ export function AgentFlow() {
 
   return (
     <div className={styles.flow}>
-      <div className={styles.sectionTitle}>Agent 编排架构</div>
+      <div className={`${styles.sectionTitle} ${styles.stageTitle}`}>Agent 编排架构</div>
 
-      <div className={styles.managerRow}>
+      <div className={`${styles.managerRow} ${styles.stageManager}`}>
         <AgentNode
           agent={manager}
           isExpanded={expandedId === manager.id}
@@ -67,7 +70,7 @@ export function AgentFlow() {
         />
       </div>
 
-      <div className={styles.connectorGroup}>
+      <div className={`${styles.connectorGroup} ${styles.stageConnector}`}>
         <div className={styles.vertLine} />
         <div className={styles.horizLine} />
         {workers.map((_, i) => (
@@ -80,17 +83,19 @@ export function AgentFlow() {
       </div>
 
       <div className={styles.workerRow}>
-        {workers.map((w) => (
+        {workers.map((w, i) => (
           <AgentNode
             key={w.id}
             agent={w}
             isExpanded={expandedId === w.id}
             onToggle={() => toggle(w.id)}
+            className={styles.stageWorker}
+            style={{ animationDelay: `${0.7 + i * 0.18}s` }}
           />
         ))}
       </div>
 
-      <div className={styles.legend}>
+      <div className={`${styles.legend} ${styles.stageLegend}`}>
         <span className={styles.legendItem}>
           <span className={`${styles.legendDot} ${styles.legendManager}`} />
           Manager

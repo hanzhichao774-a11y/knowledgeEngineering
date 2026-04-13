@@ -1,5 +1,5 @@
 .flow {
-  animation: fadeSlideIn 0.3s ease;
+  /* no global animation — each stage animates independently */
 }
 
 .sectionTitle {
@@ -239,4 +239,121 @@
   color: var(--text-muted);
   margin-left: auto;
   opacity: 0.6;
+}
+
+/* ========== Staggered Stage Animations ========== */
+
+/* Stage 1: title (immediate) */
+.stageTitle {
+  opacity: 0;
+  animation: nodeDropIn 0.4s ease forwards;
+  animation-delay: 0s;
+}
+
+/* Stage 2: Lead / Manager node */
+.stageManager {
+  opacity: 0;
+  animation: nodeDropIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.15s;
+}
+
+/* Stage 3: connector lines draw in */
+.stageConnector {
+  opacity: 0;
+  animation: connectorDraw 0.4s ease forwards;
+  animation-delay: 0.45s;
+}
+
+.stageConnector .vertLine {
+  transform-origin: top center;
+  animation: lineGrowV 0.25s ease forwards;
+  animation-delay: 0.45s;
+  opacity: 0;
+}
+
+.stageConnector .horizLine {
+  transform: scaleX(0);
+  animation: lineGrowH 0.3s ease forwards;
+  animation-delay: 0.55s;
+}
+
+.stageConnector .branchLine {
+  transform-origin: top center;
+  opacity: 0;
+  animation: lineGrowV 0.2s ease forwards;
+  animation-delay: 0.65s;
+}
+
+/* Stage 4: Worker nodes — each gets individual delay via inline style */
+.stageWorker {
+  opacity: 0;
+  animation: workerAppear 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  /* animation-delay set inline per worker */
+}
+
+/* Stage 5: legend */
+.stageLegend {
+  opacity: 0;
+  animation: fadeSlideIn 0.35s ease forwards;
+  animation-delay: 1.1s;
+}
+
+/* Keyframes */
+
+@keyframes nodeDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes connectorDraw {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lineGrowV {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scaleY(0);
+  }
+  to {
+    opacity: 0.5;
+    transform: translateX(-50%) scaleY(1);
+  }
+}
+
+@keyframes lineGrowH {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 0.5;
+  }
+}
+
+@keyframes workerAppear {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.01);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }

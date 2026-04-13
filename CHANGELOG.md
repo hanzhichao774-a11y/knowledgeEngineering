@@ -8,6 +8,28 @@
 
 ---
 
+## [0.10.0] - 2026-04-12
+
+右侧面板动态显隐 + Agent 编排树形动画 + 本体提取语义化 + Token 消耗持久累计。
+
+### Added
+
+- **Agent 编排树形入场动画**：AgentFlow 组件改为分阶段 stagger 动画——标题 → Lead 节点从上方滑入 → 连接线逐级延伸 → Worker 节点从左到右依次弹入回弹 → Legend 淡入，模拟"数字员工逐步就位"效果
+- **智能体 tab 空态占位**：无任务时显示 Bot 图标 + "等待任务分配" 提示文案，任务开始后整体以 fadeIn 动画切换为 AgentFlow + RuntimeMonitor
+- **Token 消耗持久累计**：新增 `total_cost.json` 文件持久化到 graphify-out，每次任务完成后累加写入，"总消耗"跨任务、跨重启持续累积
+
+### Changed
+
+- **产出结果 tab 条件显隐**：RightPanel 从 resultStore 和 taskStore 判断 `hasResults`，无数据时自动隐藏"产出结果" tab，activeTab 回退到"智能体"
+- **本体类语义化**：extractOntologyFromGraph 本体类从无意义的 `file_type`（document/paper/unknown）改为基于 community 聚类的语义分类，类名取社区首个 label，实体"所属类"也相应更新
+- **本体提取 source_file 过滤增强**：过滤条件从 `!sf.startsWith('raw/')` 改为 `sf.endsWith('.md') && !sf.includes('memory/')`，兼容 graphify 不同路径格式；新增噪声 label 前缀过滤（Normalized PDF / Value: 等）
+
+### Removed
+
+- **知识摘要卡片**：移除 ResultTab 中的"知识摘要"模块及相关 documentSummary 依赖
+
+---
+
 ## [0.9.0] - 2026-04-11
 
 三处 UI 优化 + 结果交互重构 + 技能面板改造。
