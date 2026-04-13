@@ -455,7 +455,6 @@ export class KodaXOrchestrator {
     return {
       provider: 'minimax-coding',
       maxIter: 150,
-      parallel: true,
       context: {
         executionCwd: workspacePath,
         skillsPrompt: buildSkillSummary(),
@@ -588,7 +587,6 @@ export class KodaXOrchestrator {
     const options: KodaXOptions = {
       provider: 'minimax-coding',
       maxIter: 30,
-      parallel: true,
       context: {
         executionCwd: workDir,
         skillsPrompt: `Available skill: ${format} document generation.`,

@@ -28,6 +28,7 @@ export interface Task {
   cost: { inputTokens: number; outputTokens: number; estimatedCost: number; elapsed: string };
   createdAt: string;
   fileId?: string;
+  fileIds?: string[];
   description?: string;
   result?: TaskResult;
 }
@@ -122,9 +123,9 @@ export class TaskService {
       cost: { inputTokens: 0, outputTokens: 0, estimatedCost: 0, elapsed: '0s' },
       createdAt: new Date().toISOString(),
       fileId: fileIds?.[0],
+      fileIds,
       description,
     };
-    (task as Record<string, unknown>).fileIds = fileIds;
     tasks.set(task.id, task);
 
     broadcast({ type: 'task.created', task: { ...task, result: undefined } });
@@ -147,7 +148,7 @@ export class TaskService {
     let totalOutputTokens = 0;
     let latestManagerMsgId: string | undefined;
 
-    const allFileIds = (task as Record<string, unknown>).fileIds as string[] | undefined;
+    const allFileIds = task.fileIds;
     const filePaths = allFileIds
       ?.map((fid) => getFilePath(fid))
       .filter((p): p is string => !!p);
