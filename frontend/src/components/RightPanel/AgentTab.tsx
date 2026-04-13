@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Bot } from 'lucide-react';
 import { useResultStore } from '../../store/resultStore';
+import { useTaskStore } from '../../store/taskStore';
 import { AgentFlow } from './AgentFlow';
 import styles from './RightPanel.module.css';
 
@@ -101,8 +102,21 @@ function RuntimeMonitor() {
 }
 
 export function AgentTab() {
+  const tasks = useTaskStore((s) => s.tasks);
+  const hasActiveTask = tasks.some((t) => t.status === 'running' || t.status === 'completed' || t.status === 'failed');
+
+  if (!hasActiveTask) {
+    return (
+      <div className={styles.agentEmpty}>
+        <Bot size={32} className={styles.agentEmptyIcon} />
+        <p className={styles.agentEmptyTitle}>等待任务分配</p>
+        <p className={styles.agentEmptyHint}>提交任务后，智能体将在此展示编排架构与执行状态</p>
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div className={styles.agentActive}>
       <AgentFlow />
       <RuntimeMonitor />
     </div>

@@ -128,10 +128,11 @@ export function CenterPanel({ isMock }: CenterPanelProps) {
         fileIds.push(fileId);
       }
 
+      const stripExt = (name: string) => name.replace(/\.[^.]+$/, '');
       const title =
         files.length === 1
-          ? files[0].name
-          : `${files.length} 份文档批量处理`;
+          ? stripExt(files[0].name)
+          : files.map((f) => stripExt(f.name)).join(' + ');
 
       await createTask(
         title,

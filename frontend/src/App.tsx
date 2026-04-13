@@ -135,6 +135,7 @@ function handleWSEvent(event: Record<string, unknown>) {
             resultStore.setSchemaProgress(100);
           }
           if (result.summary) resultStore.setDocumentSummary(result.summary);
+          if (result.answer) resultStore.setAnswerContent(result.answer);
 
           resultStore.cacheTaskResult(taskId, {
             ontology: result.ontology?.entityCount ? result.ontology : undefined,
@@ -142,6 +143,8 @@ function handleWSEvent(event: Record<string, unknown>) {
             summary: result.summary || undefined,
             answer: result.answer || undefined,
           });
+
+          resultStore.setActiveTab('result');
         }
       });
 
